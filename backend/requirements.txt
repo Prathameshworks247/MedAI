@@ -2,3 +2,5 @@ fastapi
 uvicorn[standard]
 pymongo
 python-dotenv
+faster-whisper 
+soundfile
