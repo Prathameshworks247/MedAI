@@ -1,0 +1,22 @@
+{
+  "include": [
+    "backend/src"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "backend/venv3.11"
+  ],
+  "venvPath": "backend",
+  "venv": "venv3.11",
+  "pythonVersion": "3.11",
+  "verboseOutput": true,
+  "executionEnvironments": [
+    {
+      "root": "backend/src",
+      "extraPaths": [
+        "backend/src"
+      ]
+    }
+  ]
+}
