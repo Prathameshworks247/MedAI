@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Stethoscope, Home, Users, LogOut } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import DoctorDashboard from '../components/doctor/DoctorDashboard';
 import PatientsPage from '../components/doctor/PatientsPage';
 import ActiveSession from '../components/doctor/ActiveSession';
@@ -9,6 +10,7 @@ import ChatWithAI from '../components/doctor/ChatWithAI';
 const DoctorPortal = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const navItems = [
     { path: '/doctor', icon: Home, label: 'Dashboard', exact: true },
@@ -34,15 +36,18 @@ const DoctorPortal = () => {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900">Doctor Portal</h1>
-                <p className="text-sm text-gray-600">Dr. Priya Mehta, MD</p>
+                <p className="text-sm text-gray-600">{user?.full_name || 'Doctor'}</p>
               </div>
             </div>
             <button 
-              onClick={() => navigate('/')}
+              onClick={() => {
+                logout();
+                navigate('/');
+              }}
               className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
             >
               <LogOut className="w-5 h-5" />
-              <span className="hidden sm:inline">Exit Portal</span>
+              <span className="hidden sm:inline">Logout</span>
             </button>
           </div>
         </div>

@@ -1,11 +1,11 @@
 
 import google.generativeai as genai,
-from src.models.llm_extract import ExtractedClinicalData
+from src.models.appointment import AppointmentModel
 import os
 
 model = genai.GenerativeModel("gemini-2.5-flash")
 
-def extract_clinical_data(text: str) -> ExtractedClinicalData:
+def extract_clinical_data(text: str) -> AppointmentModel:
     prompt = f"""
 You are a clinical documentation assistant.
 
@@ -18,7 +18,7 @@ RULES:
 - Follow this JSON schema exactly
 
 SCHEMA:
-{ExtractedClinicalData.model_json_schema()}
+{AppointmentModel.model_json_schema()}
 
 TEXT:
 {text}
@@ -32,6 +32,6 @@ TEXT:
         }
     )
 
-    return ExtractedClinicalData.model_validate_json(
+    return AppointmentModel.model_validate_json(
         response.text
     )

@@ -1,9 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Stethoscope, Users, Heart, Activity } from 'lucide-react';
+import { Stethoscope, Users, Heart, Activity, LogIn, UserPlus } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 const HomePage = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, user, logout } = useAuth();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-blue-50">
@@ -19,6 +21,35 @@ const HomePage = () => {
                 <h1 className="text-2xl font-bold text-gray-900">MediPortal</h1>
                 <p className="text-sm text-gray-600">Healthcare Management System</p>
               </div>
+            </div>
+            <div className="flex items-center space-x-4">
+              {isAuthenticated() ? (
+                <>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-gray-900">{user?.full_name}</p>
+                    <p className="text-xs text-gray-600 capitalize">{user?.role}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      logout();
+                      navigate('/');
+                    }}
+                    className="btn-secondary text-sm"
+                  >
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => navigate('/login')}
+                    className="flex items-center space-x-2 btn-secondary text-sm"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    <span>Login</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -36,11 +67,50 @@ const HomePage = () => {
           </p>
         </div>
 
+        {/* Auth Section - Show if not authenticated */}
+        {!isAuthenticated() && (
+          <div className="text-center mb-12">
+            <div className="inline-flex space-x-4">
+              <button
+                onClick={() => navigate('/login')}
+                className="btn-primary flex items-center space-x-2 px-6 py-3"
+              >
+                <LogIn className="w-5 h-5" />
+                <span>Login</span>
+              </button>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => navigate('/signup/doctor')}
+                  className="bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 flex items-center space-x-2"
+                >
+                  <UserPlus className="w-5 h-5" />
+                  <span>Doctor Signup</span>
+                </button>
+                <button
+                  onClick={() => navigate('/signup/patient')}
+                  className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 flex items-center space-x-2"
+                >
+                  <UserPlus className="w-5 h-5" />
+                  <span>Patient Signup</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Portal Cards */}
         <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
           {/* Doctor Portal Card */}
           <div 
-            onClick={() => navigate('/doctor')}
+            onClick={() => {
+              if (isAuthenticated() && user?.role === 'doctor') {
+                navigate('/doctor');
+              } else if (isAuthenticated() && user?.role !== 'doctor') {
+                alert('You need to be logged in as a doctor to access this portal.');
+              } else {
+                navigate('/login');
+              }
+            }}
             className="card hover:shadow-xl transition-all duration-300 cursor-pointer group border-2 border-transparent hover:border-primary-400"
           >
             <div className="text-center">
@@ -66,14 +136,22 @@ const HomePage = () => {
                 </div>
               </div>
               <button className="btn-primary w-full mt-6">
-                Enter Doctor Portal
+                {isAuthenticated() && user?.role === 'doctor' ? 'Enter Doctor Portal' : 'Login as Doctor'}
               </button>
             </div>
           </div>
 
           {/* Patient Portal Card */}
           <div 
-            onClick={() => navigate('/patient')}
+            onClick={() => {
+              if (isAuthenticated() && user?.role === 'patient') {
+                navigate('/patient');
+              } else if (isAuthenticated() && user?.role !== 'patient') {
+                alert('You need to be logged in as a patient to access this portal.');
+              } else {
+                navigate('/login');
+              }
+            }}
             className="card hover:shadow-xl transition-all duration-300 cursor-pointer group border-2 border-transparent hover:border-green-400"
           >
             <div className="text-center">
@@ -99,7 +177,7 @@ const HomePage = () => {
                 </div>
               </div>
               <button className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200 w-full mt-6">
-                Enter Patient Portal
+                {isAuthenticated() && user?.role === 'patient' ? 'Enter Patient Portal' : 'Login as Patient'}
               </button>
             </div>
           </div>

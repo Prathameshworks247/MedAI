@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Heart, Pill, MessageCircle, Apple, Bell, Home, LogOut, User, Calendar } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import PatientDashboard from '../components/patient/PatientDashboard';
 import MyAppointments from '../components/patient/MyAppointments';
 import Medications from '../components/patient/Medications';
@@ -11,6 +12,7 @@ import Notifications from '../components/patient/Notifications';
 const PatientPortal = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const navItems = [
     { path: '/patient', icon: Home, label: 'Dashboard', exact: true },
@@ -39,11 +41,14 @@ const PatientPortal = () => {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900">Patient Portal</h1>
-                <p className="text-sm text-gray-600">Rajesh Sharma</p>
+                <p className="text-sm text-gray-600">{user?.full_name || 'Patient'}</p>
               </div>
             </div>
             <button 
-              onClick={() => navigate('/')}
+              onClick={() => {
+                logout();
+                navigate('/');
+              }}
               className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
             >
               <LogOut className="w-5 h-5" />
