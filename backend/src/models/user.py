@@ -3,11 +3,12 @@ from typing import Literal
 from datetime import date
 
 class UserBase(BaseModel):
-    email: EmailStr
-    password: str
-    hashed_password: str 
+    email: EmailStr    
     full_name: str
     phone: str
+    hashed_password: str 
+    # temp fields for signup
+    password: str
 
 class PatientCreate(UserBase):
     role: Literal["patient"] = "patient"

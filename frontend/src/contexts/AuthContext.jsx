@@ -26,10 +26,9 @@ export const AuthProvider = ({ children }) => {
     try {
       const result = await authAPI.getCurrentUser();
       if (result.success) {
-        // Map user_type to role for frontend consistency
         const userData = {
           ...result.data,
-          role: result.data.user_type || result.data.role,
+          role: result.data.role,
         };
         setUser(userData);
       } else {
@@ -70,7 +69,7 @@ export const AuthProvider = ({ children }) => {
         if (userResult.success) {
           const userData = {
             ...userResult.data,
-            role: userResult.data.user_type || userResult.data.role,
+            role: userResult.data.role,
           };
           setUser(userData);
           return { success: true, user: userData };
@@ -101,12 +100,8 @@ export const AuthProvider = ({ children }) => {
         // Fetch user info
         const userResult = await authAPI.getCurrentUser();
         if (userResult.success) {
-          const userData = {
-            ...userResult.data,
-            role: userResult.data.user_type || userResult.data.role,
-          };
-          setUser(userData);
-          return { success: true, user: userData };
+          setUser(userResult.data);
+          return { success: true, user: userResult.data };
         }
       }
 
@@ -126,8 +121,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const hasRole = (role) => {
-    // Check both role and user_type for compatibility
-    return user?.role === role || user?.user_type === role;
+    return user?.role === role;
   };
 
   const value = {

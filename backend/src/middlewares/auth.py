@@ -9,13 +9,12 @@ from src.config import SECRET_KEY, ALGORITHM, oauth2_scheme
 
 async def get_user_by_id(user_id: str):
     try:
-        # Convert string ID to ObjectId for MongoDB query
         user = await user_collection.find_one({"_id": ObjectId(user_id)})
+        if user:
+            user["_id"] = str(user["_id"])
         return user
     except Exception:
-        # If conversion fails, try as string (in case IDs are stored as strings)
-        user = await user_collection.find_one({"_id": user_id})
-        return user
+        return None
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
     credentials_exception = HTTPException(
@@ -32,6 +31,6 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
     except InvalidTokenError:
         raise credentials_exception
     user = await get_user_by_id(user_id)
-    if user is None or user.get("user_type") != user_type:
+    if user is None:
         raise credentials_exception
     return user

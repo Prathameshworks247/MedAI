@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Literal
+from typing import Literal
 import jwt
 from fastapi import Depends, HTTPException, status, APIRouter
 from pydantic import BaseModel
@@ -40,10 +40,10 @@ async def get_user_by_email(email: str):
     return user
 
 async def create_user(user: PatientCreate | DoctorCreate):
-    new_user = user.model_dump()
-    new_user["hashed_password"] = get_password_hash(new_user["password"])
-    new_user.pop("password")
-    new_user = await user_collection.insert_one(new_user)
+    user_copy = user.model_dump()
+    user_copy["hashed_password"] = get_password_hash(user_copy["password"])
+    user_copy.pop("password")
+    new_user = await user_collection.insert_one(user_copy)
     return new_user
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
@@ -181,8 +181,8 @@ async def doctor_signup(
     return Token(access_token=access_token, token_type="bearer")
 
 
-@router.get("/me", response_model=UserBase)
+@router.get("/me")
 async def read_users_me(
-    user = Depends(get_current_user)
+    user=Depends(get_current_user)
 ):
     return user
