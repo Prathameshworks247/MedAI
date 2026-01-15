@@ -6,3 +6,8 @@ faster-whisper
 soundfile
 pyjwt
 pwdlib[argon2]
+google-generativeai
+langchain 
+langchain-google-genai 
+pydantic
+langchain-community

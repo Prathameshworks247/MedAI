@@ -17,7 +17,6 @@ class StreamingTranscriber:
         audio_np = np.frombuffer(chunk, dtype=np.int16)
         self.audio_buffer.append(audio_np)
 
-        # Only transcribe every ~2 seconds of audio
         if sum(len(x) for x in self.audio_buffer) < 32000:
             return ""
 
