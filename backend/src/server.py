@@ -1,18 +1,10 @@
 from typing import Any
 from fastapi import FastAPI
-from pymongo import AsyncMongoClient, server_api
 
-from routes.root import router as root_router
-
-from config import PORT, MONGODB_URI
+from src.routes.root import router as root_router
+from src.config import PORT
 
 app = FastAPI(port=PORT)
-client = AsyncMongoClient[Any](MONGODB_URI,server_api=server_api.ServerApi(version="1", strict=True,deprecation_errors=True))
-db = client.get_database("InterIIIT")
-
-
-appointment_collection = db.get_collection("appointments")
-user_collection = db.get_collection("users")
 
 
 @app.get("/")

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, UploadFile, File,WebSocket,WebSocketDisconnect
-from services.streaming_stt import StreamingTranscriber
-from services.whisper_service import transcribe_audio_file
+
+from src.services.streaming_stt import StreamingTranscriber
+from src.services.whisper_service import transcribe_audio_file
 
 router = APIRouter()
 

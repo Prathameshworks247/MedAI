@@ -13,9 +13,9 @@
   "verboseOutput": true,
   "executionEnvironments": [
     {
-      "root": "backend/src",
+      "root": "backend",
       "extraPaths": [
-        "backend/src"
+        "backend"
       ]
     }
   ]
