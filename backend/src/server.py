@@ -1,11 +1,12 @@
-from fastapi import FastAPI,WebSocket,WebSocketDisconnect,Depends,UploadFile, File
-from services.whisper_service import transcribe_audio_file
+from typing import Any
+from fastapi import FastAPI
 from pymongo import AsyncMongoClient, server_api
+from routes.root import router as root_router
 from config import PORT, MONGODB_URI
 
 app = FastAPI(port=PORT)
-
-client = AsyncMongoClient(MONGODB_URI,server_api=server_api.ServerApi(version="1", strict=True,deprecation_errors=True))
+app.include_router(root_router)
+client = AsyncMongoClient[Any](MONGODB_URI,server_api=server_api.ServerApi(version="1", strict=True,deprecation_errors=True))
 db = client.get_database("InterIIIT")
 
 

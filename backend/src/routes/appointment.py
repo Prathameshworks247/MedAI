@@ -1,6 +1,4 @@
 from fastapi import APIRouter
-
-from ..server import appointment_collection
 from services.streaming_stt import StreamingTranscriber
 from fastapi import UploadFile, File,WebSocket,WebSocketDisconnect
 from services.whisper_service import transcribe_audio_file
