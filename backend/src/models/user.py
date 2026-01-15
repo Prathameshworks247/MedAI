@@ -4,6 +4,8 @@ from datetime import date
 
 class UserBase(BaseModel):
     email: EmailStr
+    password: str
+    hashed_password: str 
     full_name: str
     phone: str
 
