@@ -4,3 +4,5 @@ pymongo
 python-dotenv
 faster-whisper 
 soundfile
+pyjwt
+pwdlib[argon2]

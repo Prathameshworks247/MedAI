@@ -12,6 +12,7 @@ db = client.get_database("InterIIIT")
 
 
 appointment_collection = db.get_collection("appointments")
+user_collection = db.get_collection("users")
 
 
 @app.get("/")
