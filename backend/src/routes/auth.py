@@ -70,13 +70,13 @@ async def patient_login(
             detail="User with this email does not exist, please signup as a patient first",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    if patient.user_type != "patient":
+    if patient.get("user_type") != "patient":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User with this email is not a patient",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    if not verify_password(data.password,patient.hashed_password):
+    if not verify_password(data.password, patient.get("hashed_password")):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect password",
@@ -90,7 +90,7 @@ async def patient_login(
         )
     )
     access_token = create_access_token(
-        data={"user_id": str(patient.inserted_id), "user_type": "patient"}, expires_delta=access_token_expires
+        data={"user_id": str(patient["_id"]), "user_type": "patient"}, expires_delta=access_token_expires
     )
     return Token(access_token=access_token, token_type="bearer")
 
@@ -131,13 +131,13 @@ async def doctor_login(
             detail="User with this email does not exist, please signup first",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    if doctor.user_type != "doctor":
+    if doctor.get("user_type") != "doctor":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User with this email is not a doctor",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    if not verify_password(data.password,doctor.hashed_password):
+    if not verify_password(data.password, doctor.get("hashed_password")):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect password",
@@ -151,7 +151,7 @@ async def doctor_login(
         )
     )
     access_token = create_access_token(
-        data={"user_id": str(doctor.inserted_id), "user_type": "doctor"}, expires_delta=access_token_expires
+        data={"user_id": str(doctor["_id"]), "user_type": "doctor"}, expires_delta=access_token_expires
     )
     return Token(access_token=access_token, token_type="bearer")
 
@@ -183,7 +183,6 @@ async def doctor_signup(
 
 @router.get("/me", response_model=UserBase)
 async def read_users_me(
-    user_id: str = Depends(get_current_user)
+    user = Depends(get_current_user)
 ):
-    user = await get_user_by_id(user_id)
     return user
