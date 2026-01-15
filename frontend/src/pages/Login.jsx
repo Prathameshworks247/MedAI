@@ -28,18 +28,13 @@ const Login = () => {
 
     try {
       // Try doctor login first
-      let result = await login(formData.email, formData.password, 'doctor');
-      
-      // If doctor login fails with "not a doctor" error, try patient login
-      if (!result.success && result.error && result.error.includes('not a doctor')) {
-        result = await login(formData.email, formData.password, 'patient');
-      }
+      let result = await login(formData.email, formData.password);
       
       if (result.success) {
         // Redirect based on role
-        if (result.user.role === 'doctor' || result.user.user_type === 'doctor') {
+        if (result.user.user_type === 'doctor') {
           navigate('/doctor');
-        } else if (result.user.role === 'patient' || result.user.user_type === 'patient') {
+        } else if (result.user.user_type === 'patient') {
           navigate('/patient');
         } else {
           navigate('/');

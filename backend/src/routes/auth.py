@@ -59,24 +59,18 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
 
 # routes
 
-@router.post("/login/patient")
-async def patient_login(
+@router.post("/login")
+async def login(
     data: Login,
 ) -> Token:
-    patient = await get_user_by_email(data.email)
-    if not patient:
+    user = await get_user_by_email(data.email)
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User with this email does not exist, please signup as a patient first",
+            detail="User with this email does not exist, please signup first",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    if patient.get("user_type") != "patient":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User with this email is not a patient",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if not verify_password(data.password, patient.get("hashed_password")):
+    if not verify_password(data.password, user.get("hashed_password")):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect password",
@@ -88,9 +82,9 @@ async def patient_login(
             if ACCESS_TOKEN_EXPIRE_MINUTES is not None
             else 10000
         )
-    )
+    )   
     access_token = create_access_token(
-        data={"user_id": str(patient["_id"]), "user_type": "patient"}, expires_delta=access_token_expires
+        data={"user_id": str(user["_id"]), "user_type": user.get("role")}, expires_delta=access_token_expires
     )
     return Token(access_token=access_token, token_type="bearer")
 
@@ -116,42 +110,6 @@ async def patient_signup(
     )
     access_token = create_access_token(
         data={"user_id": str(new_patient.inserted_id), "user_type": "patient"}, expires_delta=access_token_expires
-    )
-    return Token(access_token=access_token, token_type="bearer")
-
-
-@router.post("/login/doctor")
-async def doctor_login(
-    data: Login,
-) -> Token:
-    doctor = await get_user_by_email(data.email)
-    if not doctor:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User with this email does not exist, please signup first",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if doctor.get("user_type") != "doctor":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User with this email is not a doctor",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if not verify_password(data.password, doctor.get("hashed_password")):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    access_token_expires=timedelta(
-        minutes=float(
-            ACCESS_TOKEN_EXPIRE_MINUTES
-            if ACCESS_TOKEN_EXPIRE_MINUTES is not None
-            else 10000
-        )
-    )
-    access_token = create_access_token(
-        data={"user_id": str(doctor["_id"]), "user_type": "doctor"}, expires_delta=access_token_expires
     )
     return Token(access_token=access_token, token_type="bearer")
 

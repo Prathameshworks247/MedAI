@@ -81,17 +81,9 @@ export const apiRequest = async (endpoint, options = {}) => {
  * Auth API functions
  */
 export const authAPI = {
-  // Patient login
-  loginPatient: async (email, password) => {
-    return apiRequest('/auth/login/patient', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-  },
-
-  // Doctor login
-  loginDoctor: async (email, password) => {
-    return apiRequest('/auth/login/doctor', {
+  // Login
+  login: async (email, password) => {
+    return apiRequest('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });

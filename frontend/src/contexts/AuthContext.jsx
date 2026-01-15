@@ -49,16 +49,10 @@ export const AuthProvider = ({ children }) => {
     fetchCurrentUser();
   }, []);
 
-  const login = async (email, password, role) => {
+  const login = async (email, password) => {
     try {
       let result;
-      if (role === 'doctor') {
-        result = await authAPI.loginDoctor(email, password);
-      } else if (role === 'patient') {
-        result = await authAPI.loginPatient(email, password);
-      } else {
-        return { success: false, error: 'Invalid role specified' };
-      }
+      result = await authAPI.login(email, password);
 
       if (result.success && result.data.access_token) {
         // Store token
@@ -67,12 +61,8 @@ export const AuthProvider = ({ children }) => {
         // Fetch user info
         const userResult = await authAPI.getCurrentUser();
         if (userResult.success) {
-          const userData = {
-            ...userResult.data,
-            role: userResult.data.role,
-          };
-          setUser(userData);
-          return { success: true, user: userData };
+          setUser(userResult.data);
+          return { success: true, user: userResult.data };
         }
       }
 
