@@ -1,13 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Activity, Stethoscope, UserPlus } from 'lucide-react';
-import { X } from 'lucide-react';
-
-const DUMMY_DOCTORS = [
-    { id: 'doc_1', name: 'Dr. Sarah Wilson', specialization: 'Cardiology' },
-    { id: 'doc_2', name: 'Dr. Michael Chen', specialization: 'Neurology' },
-    { id: 'doc_3', name: 'Dr. Emily Brooks', specialization: 'General Practice' },
-    { id: 'doc_4', name: 'Dr. James Robinson', specialization: 'Orthopedics' }
-];
+import { Activity, Stethoscope, UserPlus, X } from 'lucide-react';
+import { apiRequest } from '../../utils/api';
 
 export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppointment }) {
     const [activeTab, setActiveTab] = useState('continue'); // 'continue' or 'new'
@@ -19,6 +12,30 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
         notes: ''
     });
 
+    const [doctors, setDoctors] = useState([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        const fetchDoctors = async () => {
+            try {
+                const response = await apiRequest('/doctors/');
+                if (response.success) {
+                    setDoctors(response.data.map(d => ({
+                        id: d._id,
+                        name: d.full_name,
+                        specialization: d.specialization || 'General' // Fallback
+                    })));
+                }
+            } catch (error) {
+                console.error("Failed to fetch doctors:", error);
+            }
+        };
+
+        if (isOpen) {
+            fetchDoctors();
+        }
+    }, [isOpen]);
+
     useEffect(() => {
         if (isOpen && !lastAppointment) {
             setActiveTab('new');
@@ -29,16 +46,56 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
 
     if (!isOpen) return null;
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        console.log("Creating appointment:", {
-            type: activeTab === 'continue' ? 'FOLLOW_UP' : 'NEW_ASSESSMENT',
-            patientId: patient.id,
-            previousAppointmentId: activeTab === 'continue' ? lastAppointment?.id : null,
-            ...formData
-        });
-        // TODO: Call API endpoint
-        onClose();
+        setLoading(true);
+
+        const type = activeTab === 'continue' ? 'old' : 'new';
+        
+        // Calculate end time (default 30 mins duration)
+        const startTime = new Date(`${formData.date}T${formData.time}`);
+        const endTime = new Date(startTime.getTime() + 30 * 60000);
+
+        const payload = {
+            patient_id: patient.id,
+            doctor_id: formData.doctorId,
+            appointment_date: new Date(formData.date).toISOString(),
+            status: "SCHEDULED",
+            chief_complaint: formData.chiefComplaint || (lastAppointment ? "Follow up" : "New Visit"),
+            start_time: startTime.toISOString(),
+            end_time: endTime.toISOString(),
+            // Required empty fields for validation
+            discussion: "",
+            discussion_summary: "",
+            reports: [],
+            tests: [],
+            diagnosis: {}
+        };
+
+        let endpoint = `/appointments/?type=${type}`;
+        if (type === 'old' && lastAppointment) {
+            endpoint += `&prev_appointment_id=${lastAppointment.id}`;
+        }
+
+        try {
+            const response = await apiRequest(endpoint, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+
+            if (response.success) {
+                console.log("Appointment created:", response.data);
+                // Optionally refresh parent or show success
+                onClose();
+            } else {
+                console.error("Failed to create appointment:", response.error);
+                // Show error to user (could add state for error message)
+            }
+        } catch (error) {
+            console.error("Error submitting appointment:", error);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -126,7 +183,7 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
                                         required
                                     >
                                         <option value="">Choose a doctor...</option>
-                                        {DUMMY_DOCTORS.map(doc => (
+                                        {doctors.map(doc => (
                                             <option key={doc.id} value={doc.id}>{doc.name} - {doc.specialization}</option>
                                         ))}
                                     </select>
@@ -179,9 +236,10 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
                             </button>
                             <button
                                 type="submit"
-                                className="px-6 py-2.5 rounded-lg bg-primary-600 text-white font-medium hover:bg-primary-700 shadow-lg shadow-primary-500/30 transition-all transform hover:-translate-y-0.5"
+                                disabled={loading}
+                                className={`px-6 py-2.5 rounded-lg bg-primary-600 text-white font-medium hover:bg-primary-700 shadow-lg shadow-primary-500/30 transition-all transform hover:-translate-y-0.5 ${loading ? 'opacity-50 cursor-wait' : ''}`}
                             >
-                                Schedule Appointment
+                                {loading ? 'Scheduling...' : 'Schedule Appointment'}
                             </button>
                         </div>
                     </form>

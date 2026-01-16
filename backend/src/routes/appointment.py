@@ -1,9 +1,10 @@
-from fastapi import APIRouter, UploadFile, File, WebSocket, WebSocketDisconnect, Query, HTTPException, status
+from fastapi import APIRouter, UploadFile, File, WebSocket, WebSocketDisconnect, Query, HTTPException, status, Depends
 from bson import ObjectId
 from datetime import datetime
 from typing import Optional
 
 from src.models.appointment import AppointmentModel
+from src.middlewares.auth import check_doctor_exists
 from src.db import appointment_collection
 from src.services.streaming_stt import StreamingTranscriber
 from src.services.whisper_service import transcribe_audio_file
@@ -14,7 +15,8 @@ router = APIRouter()
 async def create_appointment(
     appointment: AppointmentModel,
     appointment_type: str = Query("new", alias="type"),
-    prev_appointment_id: Optional[str] = Query(None)
+    prev_appointment_id: Optional[str] = Query(None),
+    doctor=Depends(check_doctor_exists)
 ):
     """
     Create a new appointment in the database.
