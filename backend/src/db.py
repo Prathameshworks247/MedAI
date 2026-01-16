@@ -11,7 +11,7 @@ ALLOW_INVALID_CERTS = os.getenv("MONGODB_ALLOW_INVALID_CERTS", "true").lower() =
 # MongoDB connection with SSL/TLS configuration
 # mongodb+srv:// automatically uses TLS/SSL
 connection_kwargs = {
-    "server_api": server_api.ServerApi(version="1", strict=True, deprecation_errors=True),
+    "server_api": server_api.ServerApi(version="1", strict=False, deprecation_errors=True),
 }
 
 # Allow invalid certificates for development (MongoDB Atlas SSL certificate verification)

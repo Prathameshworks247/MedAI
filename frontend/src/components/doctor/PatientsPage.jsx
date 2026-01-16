@@ -35,43 +35,80 @@ const PatientsPage = () => {
 
   const fetchAppointments = async (patientId) => {
     try {
-      const response = await apiRequest(`/appointments/?patient_id=${patientId}`);
-      if (response.success) {
-        // Map backend data to frontend format
-        const mapped = response.data.map((apt, index) => {
-            const dateObj = new Date(apt.start_time);
-            return {
-                id: apt._id,
-                appointmentNumber: response.data.length - index, // Simple countdown or calc
-                type: apt.type === 'new' ? 'NEW_PATIENT' : 'FOLLOW_UP',
-                scheduledDate: apt.appointment_date ? apt.appointment_date.split('T')[0] : '',
-                scheduledTime: dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                chiefComplaint: apt.chief_complaint,
-                status: apt.status || 'scheduled', // Default
-                doctor: apt.doctor, // { name, specialization }
-                session: {
-                    activities: [] // Populate based on data presence?
-                }
-            };
-        });
+      const [scheduledRes, completedRes, totalRes] = await Promise.all([
+        apiRequest(`/appointments/?patient_id=${patientId}&appointment_status=scheduled`),
+        apiRequest(`/appointments/?patient_id=${patientId}&appointment_status=completed&limit=10`),
+        apiRequest(`/appointments/total?patient_id=${patientId}`)
+      ]);
 
-        // Add some basic activities based on content presence
-        mapped.forEach(apt => {
-            if (apt.discussion) {
-                apt.session.activities.push({
-                    type: 'recording',
-                    title: 'Session Recording',
-                    timestamp: 'During Visit',
-                    data: { transcription: apt.discussion }
-                });
-            }
-        });
+      let allAppointments = [];
 
-        // Sort by date desc
-        mapped.sort((a, b) => new Date(b.scheduledDate + 'T' + b.scheduledTime) - new Date(a.scheduledDate + 'T' + a.scheduledTime));
-        
-        setPatientAppointments(mapped);
+      const mapAppointment = (apt, index, totalCount) => {
+        const dateObj = new Date(apt.start_time);
+        return {
+            id: apt._id,
+            // For scheduled, we might not have a reliable countdown if we don't have all historic data, 
+            // but we can try our best or just use strict index if needed. 
+            // However, the UI uses it for "Appointment #X". 
+            // For this specific view, exact historic numbering might be less critical or we can accept it's partial.
+            // Let's rely on the backend provided index or just simple client side indexing
+            appointmentNumber: '?', // Temporary placeholder or logic
+            type: apt.type === 'new' ? 'NEW_PATIENT' : 'FOLLOW_UP',
+            scheduledDate: apt.appointment_date ? apt.appointment_date.split('T')[0] : '',
+            scheduledTime: dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            chiefComplaint: apt.chief_complaint,
+            status: apt.status || 'scheduled',
+            doctor: apt.doctor,
+            session: {
+                activities: []
+            },
+            discussion: apt.discussion // Keep raw discussion for processing
+        };
+      };
+
+      const processActivities = (apt) => {
+        if (apt.discussion) {
+            apt.session.activities.push({
+                type: 'recording',
+                title: 'Session Recording',
+                timestamp: 'During Visit',
+                data: { transcription: apt.discussion }
+            });
+        }
+        return apt;
+      };
+
+      // Process Scheduled
+      if (scheduledRes.success) {
+          const scheduledMapped = scheduledRes.data.map(apt => processActivities(mapAppointment(apt)));
+          allAppointments = [...allAppointments, ...scheduledMapped];
       }
+
+      // Process Completed
+      if (completedRes.success) {
+          const completedMapped = completedRes.data.map(apt => processActivities(mapAppointment(apt)));
+          allAppointments = [...allAppointments, ...completedMapped];
+      }
+
+      // Sort by date desc
+      allAppointments.sort((a, b) => new Date(b.scheduledDate + 'T' + b.scheduledTime) - new Date(a.scheduledDate + 'T' + a.scheduledTime));
+      
+      // Fix numbering based on sorted combined list or total count
+      // This is a rough approximation since we don't have ALL appointments
+      allAppointments.forEach((apt, i) => {
+        apt.appointmentNumber = allAppointments.length - i; 
+      });
+
+      setPatientAppointments(allAppointments);
+
+      // Update total appointments count if available
+      if (totalRes.success) {
+        setSelectedPatient(prev => ({
+            ...prev,
+            totalAppointments: totalRes.data.total
+        }));
+      }
+
     } catch (e) {
         console.error("Failed to fetch appointments", e);
     }
@@ -176,28 +213,24 @@ const PatientsPage = () => {
         {appointments.map((appointment, index) => {
           const isExpanded = expandedAppointment === appointment.id;
           const session = appointment.session;
+          const appointmentNo = appointment.id.split('-')[1];
 
           return (
             <div key={appointment.id} className={`card ${isExpanded ? 'ring-2 ring-primary-500' : ''}`}>
               {/* Appointment Header */}
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
-                  <div className="flex items-center space-x-2 mb-2">
+                  <div className="flex items-center space-x-2 mb-1">
                     <Calendar className="w-5 h-5 text-gray-600" />
                     <h4 className="text-lg font-bold text-gray-900">
-                      Appointment #{appointment.appointmentNumber}
-                    </h4>
-                    {getTypeBadge(appointment.type, appointment.appointmentNumber)}
-                    {appointment.doctor && (
-                         <span className="text-sm bg-gray-100 px-2 py-1 rounded text-gray-600">
-                            👨‍⚕️ {appointment.doctor.name}
-                         </span>
-                    )}
+                      {appointmentNo == 0 ? "Baseline Appointment" : `Continued Visit #${appointmentNo}`}
+                    </h4>                    
                   </div>
-                  <p className="text-sm text-gray-600 mb-1">
-                    📅 {appointment.scheduledDate} at {appointment.scheduledTime}
+                  <p className="text-base font-semibold mb-1">Doctor: {appointment.doctor.name}</p>
+                  <p className="text-sm text-gray-700 mb-1">Chief Complaint: {appointment.chiefComplaint}</p>
+                  <p className="text-sm text-gray-600 mb-1 italic">
+                    "{appointment.scheduledDate} at {appointment.scheduledTime}" 
                   </p>
-                  <p className="text-sm text-gray-700 font-semibold">{appointment.chiefComplaint}</p>
                 </div>
                 <span className={`text-xs px-3 py-1 rounded-full font-semibold ${getStatusBadge(appointment.status)}`}>
                   {appointment.status.replace('_', ' ')}
@@ -444,10 +477,7 @@ const PatientsPage = () => {
                         <div key={apt.id} className="bg-white border-l-4 border-blue-500 rounded-lg shadow-sm p-4 hover:shadow-md transition-all">
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <h4 className="font-bold text-lg text-gray-900 mb-1">
-                                        Today, {apt.scheduledTime}
-                                    </h4>
-                                    <p className="text-gray-600 mb-2">{apt.scheduledDate}</p>
+                                    <p className="text-gray-700 mb-4">Chief Complaint: {apt.chiefComplaint}</p>
                                     <div className="flex items-center space-x-4">
                                         {apt.doctor && (
                                             <p className="text-sm text-gray-700 bg-gray-100 px-2 py-1 rounded flex items-center">
@@ -455,7 +485,7 @@ const PatientsPage = () => {
                                                 {apt.doctor.name}
                                             </p>
                                         )}
-                                        <p className="text-sm text-gray-500 italic">"{apt.chiefComplaint}"</p>
+                                        <p className="text-sm text-gray-500 italic">"{apt.scheduledDate} at {apt.scheduledTime}"</p>
                                     </div>
                                 </div>
                                 <button 

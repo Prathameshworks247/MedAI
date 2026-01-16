@@ -12,12 +12,30 @@ from src.services.whisper_service import transcribe_audio_file
 router = APIRouter()
 
 
+@router.get("/total")
+async def total_appointments(
+    patient_id: Optional[str] = Query(None),
+):
+    try:
+        query = {"status": "completed"}
+        if patient_id:
+            query["patient_id"] = patient_id
+        count = await appointment_collection.count_documents(query)
+        return {"total": count}
+    except Exception as e:
+        print(f"Error counting appointments: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to count appointments: {str(e)}"
+        )
+
 @router.get("/")
 async def read_appointments(
     patient_id: Optional[str] = Query(None),
     doctor_id: Optional[str] = Query(None),
     appointment_status: Optional[str] = Query(None),
-    appointment_date: Optional[str] = Query(None)
+    appointment_date: Optional[str] = Query(None),
+    limit: Optional[int] = Query(None),
 ):
     """Get all appointments"""
     try:
@@ -31,7 +49,7 @@ async def read_appointments(
             query["status"] = appointment_status
         if appointment_date:
             query["appointment_date"] = appointment_date
-        async for appointment in appointment_collection.find(query):
+        async for appointment in appointment_collection.find(query).limit(limit or 1000):
             # Convert ObjectId to string
             appointment["_id"] = str(appointment["_id"])
             # Convert datetime objects to ISO format strings
@@ -145,14 +163,17 @@ async def create_appointment(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Previous appointment ID not provided"
                 )
-            prev_appointment = await appointment_collection.find_one({"_id": ObjectId(prev_appointment_id)})
+            prev_appointment = await appointment_collection.find_one({"_id": prev_appointment_id})
             if not prev_appointment:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Previous appointment with ID {prev_appointment_id} not found"
                 )
-            appointment_number = prev_appointment_id.split("-")[1]
-            appointment_dict["_id"] = str(f"{ObjectId()}-{int(appointment_number) + 1}")
+            prev_app_id = prev_appointment_id.split("-")[0]         
+            prev_app_number = prev_appointment_id.split("-")[1]
+            print(prev_app_id, prev_app_number)
+            appointment_dict["_id"] = str(f"{prev_app_id}-{int(prev_app_number) + 1}")
+            print(appointment_dict["_id"])
         else:
             appointment_dict["_id"] = str(f"{ObjectId()}-{0}")
         
