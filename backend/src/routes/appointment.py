@@ -30,9 +30,9 @@ async def create_appointment(appointment: AppointmentModel):
         if "updated_at" not in appointment_dict or not appointment_dict["updated_at"]:
             appointment_dict["updated_at"] = datetime.now()
         
-        # Initialize empty transcript if not provided
-        if "transcript" not in appointment_dict:
-            appointment_dict["transcript"] = ""
+        # Initialize empty discussion if not provided
+        if "discussion" not in appointment_dict:
+            appointment_dict["discussion"] = ""
         
         # Insert into database
         result = await appointment_collection.insert_one(appointment_dict)
@@ -127,7 +127,7 @@ async def transcribe_file(
     text = await transcribe_audio_file(file)
     print(text)
     return {
-        "transcript": text
+        "discussion": text
     }
 
 @router.websocket('/ws/dictation')
@@ -151,16 +151,16 @@ async def live_detection(websocket: WebSocket):
     if appointment_id:
         try:
             appointment_object_id = ObjectId(appointment_id)
-            print(f"📝 Saving transcript to appointment: {appointment_id}")
+            print(f"📝 Saving discussion to appointment: {appointment_id}")
         except Exception as e:
             print(f"⚠ Invalid appointment_id format, using as string: {e}")
             # Try using appointment_id as string if ObjectId conversion fails
             appointment_object_id = appointment_id
     else:
-        print("⚠ No appointment_id provided, transcript will not be saved to database")
+        print("⚠ No appointment_id provided, discussion will not be saved to database")
     
-    async def save_transcript_to_appointment(text: str, is_final: bool = False):
-        """Save transcript chunk to appointment in database"""
+    async def save_discussion_to_appointment(text: str, is_final: bool = False):
+        """Save discussion chunk to appointment in database"""
         if not appointment_object_id:
             return
         
@@ -168,7 +168,7 @@ async def live_detection(websocket: WebSocket):
             # Try ObjectId first
             search_filter = {"_id": appointment_object_id}
             
-            # Get current transcript from appointment
+            # Get current discussion from appointment
             appointment = await appointment_collection.find_one(search_filter)
             
             if not appointment and appointment_id:
@@ -180,28 +180,28 @@ async def live_detection(websocket: WebSocket):
                 print(f"⚠ Appointment not found with ID: {appointment_id}")
                 return
             
-            current_transcript = appointment.get("transcript", "")
+            current_discussion = appointment.get("discussion", "")
             
-            # Append new text to existing transcript
-            updated_transcript = current_transcript + (" " + text if current_transcript else text)
+            # Append new text to existing discussion
+            updated_discussion = current_discussion + (" " + text if current_discussion else text)
             
-            # Update appointment with new transcript
+            # Update appointment with new discussion
             result = await appointment_collection.update_one(
                 search_filter,
                 {
                     "$set": {
-                        "transcript": updated_transcript,
+                        "discussion": updated_discussion,
                         "updated_at": datetime.now()
                     }
                 }
             )
             
             if result.matched_count > 0:
-                print(f"✓ Saved transcript to appointment ({'final' if is_final else 'partial'}): {len(updated_transcript)} chars")
+                print(f"✓ Saved discussion to appointment ({'final' if is_final else 'partial'}): {len(updated_discussion)} chars")
             else:
                 print(f"⚠ Failed to update appointment with ID: {appointment_id}")
         except Exception as e:
-            print(f"✗ Error saving transcript to appointment: {e}")
+            print(f"✗ Error saving discussion to appointment: {e}")
             import traceback
             traceback.print_exc()
     
@@ -217,11 +217,11 @@ async def live_detection(websocket: WebSocket):
             
             try:
                 partial_text = transcriber.process_audio_chunk(message)
-                print(f"Transcription result: {partial_text}")
+                print(f"Discussion result: {partial_text}")
                 
                 if partial_text:
-                    # Save partial transcript to appointment
-                    await save_transcript_to_appointment(partial_text, is_final=False)
+                    # Save partial discussion to appointment
+                    await save_discussion_to_appointment(partial_text, is_final=False)
                     
                     # Try to send, but handle disconnection gracefully
                     try:
@@ -241,22 +241,22 @@ async def live_detection(websocket: WebSocket):
                 continue
                 
     except WebSocketDisconnect:
-        print("WebSocket disconnected, finalizing transcript...")
+        print("WebSocket disconnected, finalizing discussion...")
     except Exception as e:
         print(f"WebSocket error: {e}")
         import traceback
         traceback.print_exc()
     finally:
-        # Finalize transcript and save it
+        # Finalize discussion and save it
         try:
             final_text = transcriber.finalize()
-            print(f"Final transcript: {final_text}")
+            print(f"Final discussion: {final_text}")
 
-            # Save final transcript to appointment
+            # Save final discussion to appointment
             if final_text:
-                await save_transcript_to_appointment(final_text, is_final=True)
+                await save_discussion_to_appointment(final_text, is_final=True)
 
-            # Try to send final transcript, but don't fail if connection is closed
+            # Try to send final discussion, but don't fail if connection is closed
             try:
                 await websocket.send_json({
                     "type": "final_transcript",
@@ -265,7 +265,7 @@ async def live_detection(websocket: WebSocket):
             except (WebSocketDisconnect, RuntimeError, Exception):
                 pass  # Connection already closed, that's okay
         except Exception as e:
-            print(f"Error finalizing transcript: {e}")
+            print(f"Error finalizing discussion: {e}")
         
         # Close WebSocket if still open
         try:

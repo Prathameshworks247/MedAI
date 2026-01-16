@@ -20,10 +20,10 @@ class AppointmentModel(BaseModel):
     start_time: datetime = Field(...)
     end_time: datetime = Field(...)
     discussion: str = Field(...)
+    discussion_summary: str = Field(...)
     reports: List[ReportModel] = Field(...)
     tests: List[TestModel] = Field(...)
-    diagnosis: dict = Field(...)
-    transcript: str = Field(default="")  # Store consultation transcript
+    diagnosis: dict = Field(...)    
     created_at: datetime = Field(default=datetime.now())
     updated_at: datetime = Field(default=datetime.now())
     
