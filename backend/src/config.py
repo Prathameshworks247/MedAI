@@ -5,11 +5,18 @@ from pwdlib import PasswordHash
 
 load_dotenv()
 
-PORT = os.getenv('PORT')
+PORT = os.getenv('PORT', '8000')
 MONGODB_URI = os.getenv('MONGODB_URI')
+
+# JWT Configuration - with defaults for development
 SECRET_KEY = os.getenv('SECRET_KEY')
-ALGORITHM = os.getenv('ALGORITHM')
-ACCESS_TOKEN_EXPIRE_MINUTES = os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES')
+if not SECRET_KEY:
+    # Default secret key for development only - CHANGE IN PRODUCTION!
+    SECRET_KEY = "dev-secret-key-change-in-production-please-use-strong-random-key"
+    print("WARNING: Using default SECRET_KEY. Set SECRET_KEY in .env for production!")
+
+ALGORITHM = os.getenv('ALGORITHM', 'HS256')
+ACCESS_TOKEN_EXPIRE_MINUTES = os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '10080')  # 7 days default
 
 password_hash = PasswordHash.recommended()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")

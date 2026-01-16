@@ -11,3 +11,4 @@ langchain
 langchain-google-genai 
 pydantic
 langchain-community
+pydub

@@ -1,13 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Play, Square, Clock, CheckCircle, Upload, FileText, Brain, Download, Eye, Plus, Mic, FileCheck, TestTube2, Sparkles, MessageSquare } from 'lucide-react';
 import { appointments, ACTIVITY_TYPES, isRequiredActivitiesComplete, getActivityIcon } from '../../data/appointmentData';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 const ActiveSession = () => {
   const { appointmentId } = useParams();
   const navigate = useNavigate();
   const appointment = appointments.find(a => a.id === appointmentId);
   const [expandedActivity, setExpandedActivity] = useState(null);
+  
+  // Audio recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [transcription, setTranscription] = useState('');
+  const [partialTranscript, setPartialTranscript] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
+  
+  // Refs for audio recording
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const websocketRef = useRef(null);
+  const streamRef = useRef(null);
+  const intervalRef = useRef(null);
+  const durationIntervalRef = useRef(null);
+  const segmentChunksRef = useRef([]); // Persist chunks across MediaRecorder restarts
   
   if (!appointment) {
     return <div className="p-6">Appointment not found</div>;
@@ -16,6 +34,240 @@ const ActiveSession = () => {
   const session = appointment.session;
   const activities = session?.activities || [];
   const requiredComplete = isRequiredActivitiesComplete(session);
+
+  // Format duration as MM:SS
+  const formatDuration = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Connect to WebSocket
+  const connectWebSocket = () => {
+    try {
+      // Extract host from API_BASE_URL
+      const url = new URL(API_BASE_URL);
+      const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${url.host}/appointments/ws/dictation`;
+      
+      console.log('Connecting to WebSocket:', wsUrl);
+      const ws = new WebSocket(wsUrl);
+      websocketRef.current = ws;
+
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        setIsConnected(true);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'partial_transcript') {
+            setPartialTranscript(data.text);
+          } else if (data.type === 'final_transcript') {
+            setTranscription(prev => prev + (prev ? ' ' : '') + data.text);
+            setPartialTranscript('');
+          }
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setIsConnected(false);
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket disconnected');
+        setIsConnected(false);
+      };
+    } catch (error) {
+      console.error('Error connecting WebSocket:', error);
+      setIsConnected(false);
+    }
+  };
+
+// Replace the handleStartRecording function with this:
+
+const handleStartRecording = async () => {
+  try {
+    // Request microphone access
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      audio: {
+        channelCount: 1,
+        sampleRate: 16000,
+        echoCancellation: true,
+        noiseSuppression: true
+      } 
+    });
+    
+    streamRef.current = stream;
+
+    // Connect to WebSocket
+    connectWebSocket();
+
+    // Wait for WebSocket to connect
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Check MIME type support
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : 'audio/webm';
+
+    console.log('Using MIME type:', mimeType);
+
+    // Create MediaRecorder
+    const mediaRecorder = new MediaRecorder(stream, {
+      mimeType: mimeType,
+      audioBitsPerSecond: 128000
+    });
+    
+    mediaRecorderRef.current = mediaRecorder;
+
+    // Reset chunks array for new recording session
+    segmentChunksRef.current = [];
+    
+    // Collect chunks as they arrive (fires every 1 second due to timeslice)
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        segmentChunksRef.current.push(event.data);
+        const totalSize = segmentChunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0);
+        console.log(`📦 Chunk ${segmentChunksRef.current.length}: ${event.data.size} bytes (segment total: ${(totalSize / 1024).toFixed(1)} KB)`);
+      }
+    };
+
+    // When recording stops, send the complete segment
+    mediaRecorder.onstop = () => {
+      // Request any remaining data before processing
+      if (mediaRecorder.state === 'inactive' && segmentChunksRef.current.length > 0) {
+        const completeSegment = new Blob(segmentChunksRef.current, { type: mimeType });
+        const segmentSizeKB = completeSegment.size / 1024;
+        
+        console.log(`📦 Segment complete: ${completeSegment.size} bytes (${segmentSizeKB.toFixed(1)} KB) from ${segmentChunksRef.current.length} chunks`);
+        
+        if (websocketRef.current?.readyState === WebSocket.OPEN && completeSegment.size > 1000) {
+          // Only send if segment is meaningful (at least 1KB)
+          completeSegment.arrayBuffer().then(buffer => {
+            console.log(`📤 Sending WebM segment: ${buffer.byteLength} bytes (${(buffer.byteLength / 1024).toFixed(1)} KB)`);
+            websocketRef.current.send(buffer);
+          }).catch(error => {
+            console.error('Error sending segment:', error);
+          });
+        } else if (completeSegment.size <= 1000) {
+          console.warn(`⚠ Segment too small (${segmentSizeKB.toFixed(1)} KB), skipping`);
+        }
+        
+        // Clear for next segment
+        segmentChunksRef.current = [];
+      }
+      
+      // Automatically start next segment if still recording
+      if (isRecording) {
+        setTimeout(() => {
+          if (isRecording && mediaRecorderRef.current && mediaRecorderRef.current.state === 'inactive') {
+            console.log('🔄 Starting next 15-second segment...');
+            // Reset chunks array for new segment
+            segmentChunksRef.current = [];
+            // Restart with timeslice
+            mediaRecorderRef.current.start(1000);
+          }
+        }, 200);
+      }
+    };
+
+    // Start recording with timeslice to ensure chunks are collected regularly
+    // Timeslice of 1 second ensures we get chunks every second
+    mediaRecorder.start(1000); // Request data every 1 second
+    
+    // Set up interval to stop/restart every 15 seconds for complete segments
+    intervalRef.current = setInterval(() => {
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state === 'recording') {
+        // Request final data before stopping
+        recorder.requestData();
+        // Small delay to ensure final data is collected, then stop
+        setTimeout(() => {
+          if (recorder && recorder.state === 'recording') {
+            console.log(`⏹ Stopping segment after 15 seconds (collected ${segmentChunksRef.current.length} chunks)`);
+            recorder.stop(); // This triggers onstop, which sends the segment
+          }
+        }, 200);
+      }
+    }, 15000); // Create a new segment every 15 seconds
+
+    setIsRecording(true);
+    setRecordingDuration(0);
+    setTranscription('');
+    setPartialTranscript('');
+
+    // Start duration timer
+    durationIntervalRef.current = setInterval(() => {
+      setRecordingDuration(prev => prev + 1);
+    }, 1000);
+
+    console.log('✓ Recording started with 15-second segments');
+
+  } catch (error) {
+    console.error('Error starting recording:', error);
+    alert('Failed to start recording. Please check microphone permissions.');
+  }
+};
+
+
+  // Stop recording
+  const handleStopRecording = async () => {
+    try {
+      console.log('Stopping recording...');
+      
+      // Clear interval first
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+  
+      // Stop MediaRecorder (this will trigger onstop one last time)
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+  
+      // Stop all tracks
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+  
+      // Clear duration timer
+      if (durationIntervalRef.current) {
+        clearInterval(durationIntervalRef.current);
+        durationIntervalRef.current = null;
+      }
+  
+      setIsRecording(false);
+  
+      // Wait for final segment to be sent, then close WebSocket
+      setTimeout(() => {
+        if (websocketRef.current) {
+          console.log('Closing WebSocket connection');
+          websocketRef.current.close();
+          websocketRef.current = null;
+        }
+        setIsConnected(false);
+      }, 1000);
+  
+      console.log('✓ Recording stopped');
+  
+    } catch (error) {
+      console.error('Error stopping recording:', error);
+    }
+  };
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      handleStopRecording();
+    };
+  }, []);
 
   const getActivityColor = (type) => {
     const colors = {
@@ -319,14 +571,29 @@ const ActiveSession = () => {
           </div>
         </div>
 
+        {/* Recording Controls - Always visible */}
+        <div className="mt-4">
+          {!isRecording ? (
+            <button 
+              onClick={handleStartRecording}
+              className="btn-primary flex items-center justify-center w-full"
+            >
+              <Mic className="w-4 h-4 mr-2" />
+              {session?.requiredCompleted?.recording ? 'Start New Recording' : 'Start Recording'}
+            </button>
+          ) : (
+            <button 
+              onClick={handleStopRecording}
+              className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center w-full"
+            >
+              <Square className="w-4 h-4 mr-2" />
+              Stop Recording ({formatDuration(recordingDuration)})
+            </button>
+          )}
+        </div>
+
         {!requiredComplete && (
           <div className="mt-4 flex space-x-3">
-            {!session?.requiredCompleted?.recording && (
-              <button className="btn-primary flex-1 flex items-center justify-center">
-                <Mic className="w-4 h-4 mr-2" />
-                Start Recording
-              </button>
-            )}
             {session?.requiredCompleted?.recording && !session?.requiredCompleted?.documents && (
               <button className="btn-primary flex-1 flex items-center justify-center">
                 <Upload className="w-4 h-4 mr-2" />
@@ -342,6 +609,73 @@ const ActiveSession = () => {
           </div>
         )}
       </div>
+
+      {/* Live Transcription Display - Show when recording or has transcription */}
+      {(isRecording || transcription || partialTranscript) && (
+        <div className="card mb-6 bg-blue-50 border-2 border-blue-300">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center">
+              <Mic className={`w-5 h-5 mr-2 text-blue-600 ${isRecording ? 'animate-pulse' : ''}`} />
+              {isRecording ? 'Live Transcription' : 'Transcription'}
+            </h3>
+            <div className="flex items-center space-x-2">
+              {isRecording && (
+                <>
+                  <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <span className="text-sm text-gray-600">
+                    {isConnected ? 'Connected' : 'Connecting...'}
+                  </span>
+                </>
+              )}
+              {transcription && !isRecording && (
+                <button 
+                  onClick={() => {
+                    const blob = new Blob([transcription], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `transcription-${appointmentId}-${Date.now()}.txt`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="text-primary-600 hover:text-primary-700 text-sm flex items-center"
+                >
+                  <Download className="w-4 h-4 mr-1" />
+                  Export
+                </button>
+              )}
+            </div>
+          </div>
+          
+          <div className="bg-white border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
+            <div className="space-y-2">
+              {transcription && (
+                <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                  {transcription}
+                </p>
+              )}
+              {partialTranscript && (
+                <p className="text-sm text-gray-500 italic whitespace-pre-wrap leading-relaxed">
+                  {partialTranscript}
+                  {isRecording && (
+                    <span className="inline-block w-2 h-4 bg-blue-500 ml-1 animate-pulse"></span>
+                  )}
+                </p>
+              )}
+              {!transcription && !partialTranscript && isRecording && (
+                <p className="text-sm text-gray-400 italic">Waiting for audio transcription...</p>
+              )}
+            </div>
+          </div>
+          
+          {isRecording && (
+            <div className="mt-3 flex items-center justify-between text-sm text-gray-600">
+              <span>Duration: {formatDuration(recordingDuration)}</span>
+              <span>Status: Recording</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Activity Timeline */}
       {activities.length > 0 && (
@@ -440,9 +774,13 @@ const ActiveSession = () => {
             <button className="btn-secondary flex items-center">
               Pause Session
             </button>
-            <button className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors flex items-center">
+            <button 
+              onClick={handleStopRecording}
+              disabled={!isRecording}
+              className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               <Square className="w-4 h-4 mr-2" />
-              End Session
+              {isRecording ? 'Stop Recording' : 'End Session'}
             </button>
           </div>
         </div>

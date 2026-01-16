@@ -3,10 +3,11 @@ from typing import Literal
 import jwt
 from fastapi import Depends, HTTPException, status, APIRouter
 from pydantic import BaseModel
+from bson import ObjectId
 
 from src.db import user_collection
 from src.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, password_hash
-from src.models.user import PatientCreate, DoctorCreate, UserBase
+from src.models.user import PatientCreate, DoctorCreate, UserBase, UserResponse
 from src.middlewares.auth import get_current_user, get_user_by_id
 
 class Login(BaseModel):
@@ -47,6 +48,11 @@ async def create_user(user: PatientCreate | DoctorCreate):
     return new_user
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    if not SECRET_KEY:
+        raise ValueError("SECRET_KEY is not set. Please set it in your .env file.")
+    if not ALGORITHM:
+        raise ValueError("ALGORITHM is not set. Please set it in your .env file.")
+    
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
@@ -140,7 +146,24 @@ async def doctor_signup(
 
 
 @router.get("/me")
+@router.get("/me")
 async def read_users_me(
     user=Depends(get_current_user)
 ):
-    return user
+    # Convert MongoDB document to JSON-serializable dict
+    # Handle ObjectId and other MongoDB-specific types
+    if isinstance(user, dict):
+        user_dict = dict(user)
+    else:
+        # If it's a MongoDB document object, convert to dict
+        user_dict = dict(user) if hasattr(user, 'items') else {}
+    
+    # Convert ObjectId to string for JSON serialization
+    if "_id" in user_dict and isinstance(user_dict["_id"], ObjectId):
+        user_dict["_id"] = str(user_dict["_id"])
+    
+    # Filter out sensitive fields
+    user_dict.pop("hashed_password", None)
+    user_dict.pop("password", None)
+    
+    return user_dict

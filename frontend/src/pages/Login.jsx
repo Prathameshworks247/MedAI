@@ -40,7 +40,12 @@ const Login = () => {
           navigate('/');
         }
       } else {
-        setError(result.error || 'Login failed. Please try again.');
+        // Provide more helpful error messages
+        if (result.error && result.error.includes('not a')) {
+          setError('Please use the correct login portal for your account type.');
+        } else {
+          setError(result.error || 'Login failed. Please try again.');
+        }
       }
     } catch (err) {
       setError('An error occurred. Please try again.');
