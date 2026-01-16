@@ -146,7 +146,6 @@ async def doctor_signup(
 
 
 @router.get("/me")
-@router.get("/me")
 async def read_users_me(
     user=Depends(get_current_user)
 ):

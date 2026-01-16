@@ -40,3 +40,31 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
         print("User not found")
         raise credentials_exception
     return user
+
+async def check_doctor_exists(token: Annotated[str, Depends(oauth2_scheme)]):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        if not SECRET_KEY:
+            raise credentials_exception
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM or "HS256"])
+        user_id = payload.get("user_id")
+        user_type = payload.get("user_type")
+        print(user_id, user_type)
+        if user_id is None or user_type is None:
+            print("User ID or user type is None")
+            raise credentials_exception
+    except InvalidTokenError:
+        print("Invalid token")
+        raise credentials_exception
+    user = await get_user_by_id(user_id)
+    if user is None:
+        print("User not found")
+        raise credentials_exception
+    if user["role"] != "doctor":
+        print("User is not a doctor")
+        raise credentials_exception
+    return user

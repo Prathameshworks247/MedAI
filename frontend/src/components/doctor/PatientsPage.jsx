@@ -1,31 +1,96 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Search, User, Calendar, FileText, TrendingUp, Brain, Download, Eye, Play, Upload, CheckCircle, Clock } from 'lucide-react';
-import { patients, getAppointmentsByPatient, getPatientById } from '../../data/appointmentData';
+import { getAppointmentsByPatient, getPatientById } from '../../data/appointmentData';
+import { apiRequest } from '../../utils/api';
 
 const PatientsPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const [patientsList, setPatientsList] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [expandedAppointment, setExpandedAppointment] = useState(null);
+
+  const calculateAge = (dob) => {
+    if (!dob) return 'N/A';
+    const birthDate = new Date(dob);
+    const ageDifMs = Date.now() - birthDate.getTime();
+    const ageDate = new Date(ageDifMs); 
+    return Math.abs(ageDate.getUTCFullYear() - 1970);
+  };
+
+  const getRegistrationDateFromId = (id) => {
+    try {
+      const timestamp = parseInt(id.substring(0, 8), 16) * 1000;
+      return new Date(timestamp).toLocaleDateString();
+    } catch (e) {
+      return 'N/A';
+    }
+  };
+
+  const fetchPatients = async (query = '') => {
+    setLoading(true);
+    try {
+      let endpoint = '/patients/';
+      if (query) {
+        endpoint += `?filter=${encodeURIComponent(query)}`;
+      }
+
+      const response = await apiRequest(endpoint);
+      if (response.success) {
+        const mapped = response.data.map(p => ({
+            id: p._id,
+            name: p.full_name,
+            age: calculateAge(p.date_of_birth),
+            gender: 'Unknown', // Not in DB
+            bloodGroup: p.blood_group,
+            phone: p.phone,
+            registeredDate: getRegistrationDateFromId(p._id),
+            totalAppointments: 0,
+            lastVisit: null
+        }));
+        setPatientsList(mapped);
+      }
+    } catch (e) {
+      console.error("Failed to fetch patients", e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Effect to fetch patients on search or init
+  useEffect(() => {
+    const timer = setTimeout(() => {
+        fetchPatients(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
 
   // Check if patient ID is in URL params
   useEffect(() => {
     const patientId = searchParams.get('patientId');
     if (patientId) {
-      const patient = getPatientById(patientId);
-      if (patient) {
-        setSelectedPatient(patient);
-        setSearchQuery(patient.name);
-      }
+        // Try to find in fetched list first
+        const patientFromList = patientsList.find(p => p.id === patientId);
+        if (patientFromList) {
+            setSelectedPatient(patientFromList);
+            setSearchQuery(patientFromList.name);
+        } else {
+            // Fallback to dummy data if not found (e.g. initial load or dummy ID)
+            const patient = getPatientById(patientId);
+            if (patient) {
+                setSelectedPatient(patient);
+                setSearchQuery(patient.name);
+            }
+        }
     }
-  }, [searchParams]);
+  }, [searchParams, patientsList]);
 
-  const filteredPatients = patients.filter(patient =>
-    patient.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    patient.id.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Use patientsList as the source
+  const filteredPatients = patientsList;
 
   const handlePatientSelect = (patient) => {
     setSelectedPatient(patient);
