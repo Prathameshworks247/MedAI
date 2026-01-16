@@ -5,11 +5,109 @@ from typing import Optional
 
 from src.models.appointment import AppointmentModel
 from src.middlewares.auth import check_doctor_exists
-from src.db import appointment_collection
+from src.db import appointment_collection, user_collection
 from src.services.streaming_stt import StreamingTranscriber
 from src.services.whisper_service import transcribe_audio_file
 
 router = APIRouter()
+
+
+@router.get("/")
+async def read_appointments(
+    patient_id: Optional[str] = Query(None),
+    doctor_id: Optional[str] = Query(None),
+    appointment_status: Optional[str] = Query(None),
+    appointment_date: Optional[str] = Query(None)
+):
+    """Get all appointments"""
+    try:
+        appointments = []
+        query = {}
+        if patient_id:
+            query["patient_id"] = patient_id
+        if doctor_id:
+            query["doctor_id"] = doctor_id
+        if appointment_status:
+            query["status"] = appointment_status
+        if appointment_date:
+            query["appointment_date"] = appointment_date
+        async for appointment in appointment_collection.find(query):
+            # Convert ObjectId to string
+            appointment["_id"] = str(appointment["_id"])
+            # Convert datetime objects to ISO format strings
+            for key in ["appointment_date", "start_time", "end_time", "created_at", "updated_at"]:
+                if key in appointment and isinstance(appointment[key], datetime):
+                    appointment[key] = appointment[key].isoformat()
+            # Populate doctor details
+            if "doctor_id" in appointment and appointment["doctor_id"]:
+                try:
+                    doctor = await user_collection.find_one({"_id": ObjectId(appointment["doctor_id"])})
+                    if doctor:
+                         appointment["doctor"] = {
+                             "name": doctor.get("full_name", "Unknown"),
+                             "specialization": doctor.get("specialization", "General")
+                         }
+                except:
+                    # Fallback if doctor_id is not valid ObjectId
+                    pass
+
+            appointments.append(appointment)
+        return appointments
+    except Exception as e:
+        print(f"Error fetching appointments: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch appointments: {str(e)}"
+        )
+
+
+@router.get("/{appointment_id}")
+async def get_appointment(appointment_id: str):
+    """Get a specific appointment by ID"""
+    try:
+        # Try ObjectId first
+        try:
+            appointment = await appointment_collection.find_one({"_id": ObjectId(appointment_id)})
+        except:
+            # If ObjectId fails, try string
+            appointment = await appointment_collection.find_one({"_id": appointment_id})
+        
+        if not appointment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Appointment with ID {appointment_id} not found"
+            )
+        
+        # Convert ObjectId to string
+        appointment["_id"] = str(appointment["_id"])
+        # Convert datetime objects to ISO format strings
+        for key in ["appointment_date", "start_time", "end_time", "created_at", "updated_at"]:
+            if key in appointment and isinstance(appointment[key], datetime):
+                appointment[key] = appointment[key].isoformat()
+        
+        # Populate doctor details
+        if "doctor_id" in appointment and appointment["doctor_id"]:
+            try:
+                doctor = await user_collection.find_one({"_id": ObjectId(appointment["doctor_id"])})
+                if doctor:
+                        appointment["doctor"] = {
+                            "name": doctor.get("full_name", "Unknown"),
+                            "specialization": doctor.get("specialization", "General")
+                        }
+            except:
+                pass
+        
+        return appointment
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching appointment: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch appointment: {str(e)}"
+        )
+
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_appointment(
@@ -83,64 +181,6 @@ async def create_appointment(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create appointment: {str(e)}"
-        )
-
-
-@router.get("/")
-async def read_appointments():
-    """Get all appointments"""
-    try:
-        appointments = []
-        async for appointment in appointment_collection.find():
-            # Convert ObjectId to string
-            appointment["_id"] = str(appointment["_id"])
-            # Convert datetime objects to ISO format strings
-            for key in ["appointment_date", "start_time", "end_time", "created_at", "updated_at"]:
-                if key in appointment and isinstance(appointment[key], datetime):
-                    appointment[key] = appointment[key].isoformat()
-            appointments.append(appointment)
-        return appointments
-    except Exception as e:
-        print(f"Error fetching appointments: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch appointments: {str(e)}"
-        )
-
-
-@router.get("/{appointment_id}")
-async def get_appointment(appointment_id: str):
-    """Get a specific appointment by ID"""
-    try:
-        # Try ObjectId first
-        try:
-            appointment = await appointment_collection.find_one({"_id": ObjectId(appointment_id)})
-        except:
-            # If ObjectId fails, try string
-            appointment = await appointment_collection.find_one({"_id": appointment_id})
-        
-        if not appointment:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Appointment with ID {appointment_id} not found"
-            )
-        
-        # Convert ObjectId to string
-        appointment["_id"] = str(appointment["_id"])
-        # Convert datetime objects to ISO format strings
-        for key in ["appointment_date", "start_time", "end_time", "created_at", "updated_at"]:
-            if key in appointment and isinstance(appointment[key], datetime):
-                appointment[key] = appointment[key].isoformat()
-        
-        return appointment
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error fetching appointment: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch appointment: {str(e)}"
         )
 
 @router.post("/transcribe-file")

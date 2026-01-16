@@ -6,6 +6,7 @@ class UserBase(BaseModel):
     email: EmailStr    
     full_name: str
     phone: str
+    gender: Literal["male", "female", "other"]
     hashed_password: str 
     # temp fields for signup
     password: str

@@ -12,6 +12,7 @@ const PatientsPage = () => {
   const [patientsList, setPatientsList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
+  const [patientAppointments, setPatientAppointments] = useState([]);
   const [expandedAppointment, setExpandedAppointment] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -32,6 +33,50 @@ const PatientsPage = () => {
     }
   };
 
+  const fetchAppointments = async (patientId) => {
+    try {
+      const response = await apiRequest(`/appointments/?patient_id=${patientId}`);
+      if (response.success) {
+        // Map backend data to frontend format
+        const mapped = response.data.map((apt, index) => {
+            const dateObj = new Date(apt.start_time);
+            return {
+                id: apt._id,
+                appointmentNumber: response.data.length - index, // Simple countdown or calc
+                type: apt.type === 'new' ? 'NEW_PATIENT' : 'FOLLOW_UP',
+                scheduledDate: apt.appointment_date ? apt.appointment_date.split('T')[0] : '',
+                scheduledTime: dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                chiefComplaint: apt.chief_complaint,
+                status: apt.status || 'SCHEDULED', // Default
+                doctor: apt.doctor, // { name, specialization }
+                session: {
+                    activities: [] // Populate based on data presence?
+                }
+            };
+        });
+
+        // Add some basic activities based on content presence
+        mapped.forEach(apt => {
+            if (apt.discussion) {
+                apt.session.activities.push({
+                    type: 'recording',
+                    title: 'Session Recording',
+                    timestamp: 'During Visit',
+                    data: { transcription: apt.discussion }
+                });
+            }
+        });
+
+        // Sort by date desc
+        mapped.sort((a, b) => new Date(b.scheduledDate + 'T' + b.scheduledTime) - new Date(a.scheduledDate + 'T' + a.scheduledTime));
+        
+        setPatientAppointments(mapped);
+      }
+    } catch (e) {
+        console.error("Failed to fetch appointments", e);
+    }
+  };
+
   const fetchPatients = async (query = '') => {
     setLoading(true);
     try {
@@ -46,11 +91,11 @@ const PatientsPage = () => {
             id: p._id,
             name: p.full_name,
             age: calculateAge(p.date_of_birth),
-            gender: 'Unknown', // Not in DB
+            gender: p.gender || 'Unknown', 
             bloodGroup: p.blood_group,
             phone: p.phone,
             registeredDate: getRegistrationDateFromId(p._id),
-            totalAppointments: 0,
+            totalAppointments: 0, 
             lastVisit: null
         }));
         setPatientsList(mapped);
@@ -98,6 +143,7 @@ const PatientsPage = () => {
     setSelectedPatient(patient);
     setSearchQuery(patient.name);
     setExpandedAppointment(null);
+    fetchAppointments(patient.id);
   };
 
   const getStatusBadge = (status) => {
@@ -142,6 +188,11 @@ const PatientsPage = () => {
                       Appointment #{appointment.appointmentNumber}
                     </h4>
                     {getTypeBadge(appointment.type, appointment.appointmentNumber)}
+                    {appointment.doctor && (
+                         <span className="text-sm bg-gray-100 px-2 py-1 rounded text-gray-600">
+                            👨‍⚕️ {appointment.doctor.name}
+                         </span>
+                    )}
                   </div>
                   <p className="text-sm text-gray-600 mb-1">
                     📅 {appointment.scheduledDate} at {appointment.scheduledTime}
@@ -381,12 +432,52 @@ const PatientsPage = () => {
             </div>
           </div>
 
+          {/* Scheduled Appointments Section */}
+          {patientAppointments.filter(a => a.status === 'SCHEDULED').length > 0 && (
+            <div className="mb-8">
+                <h3 className="text-2xl font-bold text-gray-900 flex items-center mb-4">
+                    <Clock className="w-6 h-6 mr-2 text-primary-600" />
+                    Scheduled Appointments
+                </h3>
+                <div className="grid gap-4">
+                    {patientAppointments.filter(a => a.status === 'SCHEDULED').map(apt => (
+                        <div key={apt.id} className="bg-white border-l-4 border-blue-500 rounded-lg shadow-sm p-4 hover:shadow-md transition-all">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h4 className="font-bold text-lg text-gray-900 mb-1">
+                                        Today, {apt.scheduledTime}
+                                    </h4>
+                                    <p className="text-gray-600 mb-2">{apt.scheduledDate}</p>
+                                    <div className="flex items-center space-x-4">
+                                        {apt.doctor && (
+                                            <p className="text-sm text-gray-700 bg-gray-100 px-2 py-1 rounded flex items-center">
+                                                <Stethoscope className="w-3 h-3 mr-1" />
+                                                {apt.doctor.name}
+                                            </p>
+                                        )}
+                                        <p className="text-sm text-gray-500 italic">"{apt.chiefComplaint}"</p>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => navigate(`/doctor/session/${apt.id}`)}
+                                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center font-medium"
+                                >
+                                    <Play className="w-4 h-4 mr-2" />
+                                    Start Session
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+          )}
+
           {/* Appointment History */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-2xl font-bold text-gray-900 flex items-center">
                 <Calendar className="w-6 h-6 mr-2 text-primary-600" />
-                Appointment History ({selectedPatient.totalAppointments})
+                Appointment History ({patientAppointments.filter(a => a.status !== 'SCHEDULED').length})
               </h3>
               <button 
                 onClick={() => setIsModalOpen(true)}
@@ -396,7 +487,7 @@ const PatientsPage = () => {
                 Schedule New Appointment
               </button>
             </div>
-            <AppointmentTimeline appointments={getAppointmentsByPatient(selectedPatient.id)} />
+            <AppointmentTimeline appointments={patientAppointments.filter(a => a.status !== 'SCHEDULED')} />
           </div>
         </>
       )}
@@ -411,9 +502,12 @@ const PatientsPage = () => {
       )}
       <NewAppointmentModal 
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+            setIsModalOpen(false);
+            if (selectedPatient) fetchAppointments(selectedPatient.id); // Refresh after close
+        }}
         patient={selectedPatient}
-        lastAppointment={selectedPatient ? getAppointmentsByPatient(selectedPatient.id)[0] : null}
+        lastAppointment={patientAppointments.length > 0 ? patientAppointments[0] : null}
       />
     </div>
   );

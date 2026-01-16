@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Stethoscope, Mail, User, Phone, FileText, Briefcase, Award, AlertCircle } from 'lucide-react';
+import { Stethoscope, Mail, User, Phone, FileText, Briefcase, Award, AlertCircle, Users } from 'lucide-react';
 
 const DoctorSignup = () => {
   const navigate = useNavigate();
@@ -14,6 +14,7 @@ const DoctorSignup = () => {
     license_number: '',
     specialization: '',
     years_experience: 0,
+    gender: '',
     password: '',
     confirmPassword: '',
     // temp field to avoid 422 error
@@ -148,6 +149,28 @@ const DoctorSignup = () => {
                     className="input-field pl-10"
                     placeholder="+1234567890"
                   />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="gender" className="block text-sm font-medium text-gray-700 mb-2">
+                  Gender *
+                </label>
+                <div className="relative">
+                  <Users className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <select
+                    id="gender"
+                    name="gender"
+                    value={formData.gender}
+                    onChange={handleChange}
+                    required
+                    className="input-field pl-10"
+                  >
+                    <option value="">Select Gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                  </select>
                 </div>
               </div>
 
