@@ -1,9 +1,5 @@
 import tempfile
-import soundfile as sf
 from faster_whisper import WhisperModel
-import numpy as np
-from pydub import AudioSegment
-import io
 import os
 import time
 
@@ -20,28 +16,17 @@ class StreamingTranscriber:
         self.last_process_time = time.time()
         self.last_transcription = ""
         
-    def decode_webm_to_wav(self, webm_data: bytes) -> str:
-        """Convert WebM/Opus audio to WAV format using pydub"""
+    def save_webm_to_temp(self, webm_data: bytes) -> str:
+        """Save WebM data to a temporary file - faster_whisper can process WebM directly via ffmpeg"""
         try:
-            audio = AudioSegment.from_file(io.BytesIO(webm_data), format="webm")
-            audio = audio.set_frame_rate(16000).set_channels(1)
+            # Create temporary WebM file
+            webm_file = tempfile.NamedTemporaryFile(suffix=".webm", delete=False)
+            webm_file.write(webm_data)
+            webm_file.close()
             
-            wav_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-            audio.export(wav_file.name, format="wav")
-            wav_file.close()
-            
-            return wav_file.name
-        except FileNotFoundError as e:
-            if 'ffprobe' in str(e) or 'ffmpeg' in str(e):
-                raise RuntimeError(
-                    "ffmpeg is not installed. Please install it:\n"
-                    "  macOS: brew install ffmpeg\n"
-                    "  Linux: sudo apt-get install ffmpeg\n"
-                    "  Windows: Download from https://ffmpeg.org/"
-                ) from e
-            raise
+            return webm_file.name
         except Exception as e:
-            print(f"Error decoding WebM: {e}")
+            print(f"Error saving WebM to temp file: {e}")
             raise
 
     def process_audio_chunk(self, chunk: bytes) -> str:
@@ -84,64 +69,65 @@ class StreamingTranscriber:
         return new_text
     
     def _process_segment(self, segment_data: bytes) -> str:
-        """Process a complete WebM segment"""
+        """Process a complete WebM segment directly - faster_whisper handles WebM via ffmpeg"""
+        webm_file = None
         try:
-            # Decode the complete WebM segment
-            wav_file = self.decode_webm_to_wav(segment_data)
+            # Save WebM to temp file - faster_whisper can process WebM directly
+            webm_file = self.save_webm_to_temp(segment_data)
             
-            try:
-                print("🎤 Starting Whisper transcription...")
-                start_time = time.time()
+            print("🎤 Starting Whisper transcription (processing WebM directly)...")
+            start_time = time.time()
+            
+            # faster_whisper uses ffmpeg internally and can handle WebM format directly
+            segments, info = self.model.transcribe(
+                webm_file,
+                language="en",
+                vad_filter=True,
+                beam_size=5,
+                temperature=0.0,
+                condition_on_previous_text=False,
+                word_timestamps=False
+            )
+            
+            transcribe_time = time.time() - start_time
+            print(f"📊 Audio: duration={info.duration:.2f}s, language={info.language}, transcribe_time={transcribe_time:.2f}s")
+            
+            segment_list = list(segments)
+            segment_texts = [seg.text.strip() for seg in segment_list]
+            current_transcription = " ".join(segment_texts).strip()
+            
+            print(f"📝 Raw transcription: '{current_transcription}' ({len(segment_list)} segments)")
+            
+            if current_transcription:
+                # Remove overlap with previous transcription
+                new_text = self._remove_overlap(current_transcription, self.last_transcription)
                 
-                segments, info = self.model.transcribe(
-                    wav_file,
-                    language="en",
-                    vad_filter=True,
-                    beam_size=5,
-                    temperature=0.0,
-                    condition_on_previous_text=False,
-                    word_timestamps=False
-                )
-                
-                transcribe_time = time.time() - start_time
-                print(f"📊 Audio: duration={info.duration:.2f}s, language={info.language}, transcribe_time={transcribe_time:.2f}s")
-                
-                segment_list = list(segments)
-                segment_texts = [seg.text.strip() for seg in segment_list]
-                current_transcription = " ".join(segment_texts).strip()
-                
-                print(f"📝 Raw transcription: '{current_transcription}' ({len(segment_list)} segments)")
-                
-                if current_transcription:
-                    # Remove overlap with previous transcription
-                    new_text = self._remove_overlap(current_transcription, self.last_transcription)
-                    
-                    if new_text:
-                        print(f"✨ New text: '{new_text}'")
-                        self.transcript += " " + new_text if self.transcript else new_text
-                        self.last_transcription = current_transcription
-                        print(f"✓ Total transcript: {len(self.transcript)} chars")
-                        self.last_process_time = time.time()
-                        return new_text.strip()
-                    else:
-                        print("⚠ No new text after overlap removal")
-                        self.last_process_time = time.time()
-                        return ""
+                if new_text:
+                    print(f"✨ New text: '{new_text}'")
+                    self.transcript += " " + new_text if self.transcript else new_text
+                    self.last_transcription = current_transcription
+                    print(f"✓ Total transcript: {len(self.transcript)} chars")
+                    self.last_process_time = time.time()
+                    return new_text.strip()
                 else:
-                    print("⚠ Empty transcription (silence or noise)")
+                    print("⚠ No new text after overlap removal")
                     self.last_process_time = time.time()
                     return ""
-                    
-            finally:
-                if os.path.exists(wav_file):
-                    os.unlink(wav_file)
-                    
+            else:
+                print("⚠ Empty transcription (silence or noise)")
+                self.last_process_time = time.time()
+                return ""
+                
         except Exception as e:
             print(f"✗ Processing error: {type(e).__name__}: {e}")
             import traceback
             traceback.print_exc()
             self.last_process_time = time.time()
             return ""
+        finally:
+            # Clean up temp file
+            if webm_file and os.path.exists(webm_file):
+                os.unlink(webm_file)
 
     def finalize(self) -> str:
         """Return final transcript (no buffering needed since we process segments immediately)"""

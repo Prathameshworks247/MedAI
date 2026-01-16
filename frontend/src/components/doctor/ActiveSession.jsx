@@ -26,6 +26,7 @@ const ActiveSession = () => {
   const intervalRef = useRef(null);
   const durationIntervalRef = useRef(null);
   const segmentChunksRef = useRef([]); // Persist chunks across MediaRecorder restarts
+  const isRecordingRef = useRef(false); // Track recording state to avoid closure issues
   
   if (!appointment) {
     return <div className="p-6">Appointment not found</div>;
@@ -48,7 +49,8 @@ const ActiveSession = () => {
       // Extract host from API_BASE_URL
       const url = new URL(API_BASE_URL);
       const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProtocol}//${url.host}/appointments/ws/dictation`;
+      // Include appointment_id as query parameter so backend can save transcript
+      const wsUrl = `${wsProtocol}//${url.host}/appointments/ws/dictation?appointment_id=${appointmentId}`;
       
       console.log('Connecting to WebSocket:', wsUrl);
       const ws = new WebSocket(wsUrl);
@@ -63,10 +65,17 @@ const ActiveSession = () => {
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'partial_transcript') {
+            // Append partial transcript to existing transcription
+            setTranscription(prev => {
+              const newText = prev + (prev ? ' ' : '') + data.text;
+              return newText;
+            });
             setPartialTranscript(data.text);
           } else if (data.type === 'final_transcript') {
+            // Append final transcript to existing transcription
             setTranscription(prev => prev + (prev ? ' ' : '') + data.text);
             setPartialTranscript('');
+            console.log('✓ Final transcript received and appended');
           }
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -139,8 +148,10 @@ const handleStartRecording = async () => {
 
     // When recording stops, send the complete segment
     mediaRecorder.onstop = () => {
+      const recorder = mediaRecorderRef.current;
+      
       // Request any remaining data before processing
-      if (mediaRecorder.state === 'inactive' && segmentChunksRef.current.length > 0) {
+      if (recorder && recorder.state === 'inactive' && segmentChunksRef.current.length > 0) {
         const completeSegment = new Blob(segmentChunksRef.current, { type: mimeType });
         const segmentSizeKB = completeSegment.size / 1024;
         
@@ -162,17 +173,27 @@ const handleStartRecording = async () => {
         segmentChunksRef.current = [];
       }
       
-      // Automatically start next segment if still recording
-      if (isRecording) {
+      // Automatically start next segment if still recording (use ref to avoid closure issues)
+      if (isRecordingRef.current) {
         setTimeout(() => {
-          if (isRecording && mediaRecorderRef.current && mediaRecorderRef.current.state === 'inactive') {
+          const currentRecorder = mediaRecorderRef.current;
+          if (isRecordingRef.current && currentRecorder && currentRecorder.state === 'inactive') {
             console.log('🔄 Starting next 15-second segment...');
             // Reset chunks array for new segment
             segmentChunksRef.current = [];
             // Restart with timeslice
-            mediaRecorderRef.current.start(1000);
+            try {
+              currentRecorder.start(1000);
+              console.log('✓ Next segment started successfully');
+            } catch (error) {
+              console.error('Error restarting MediaRecorder:', error);
+            }
+          } else {
+            console.log(`⚠ Cannot restart: isRecording=${isRecordingRef.current}, recorder=${!!currentRecorder}, state=${currentRecorder?.state}`);
           }
-        }, 200);
+        }, 300); // Slightly longer delay to ensure state is ready
+      } else {
+        console.log('⏹ Recording stopped, not restarting segment');
       }
     };
 
@@ -197,6 +218,7 @@ const handleStartRecording = async () => {
     }, 15000); // Create a new segment every 15 seconds
 
     setIsRecording(true);
+    isRecordingRef.current = true; // Set ref to track recording state
     setRecordingDuration(0);
     setTranscription('');
     setPartialTranscript('');
@@ -244,6 +266,7 @@ const handleStartRecording = async () => {
       }
   
       setIsRecording(false);
+      isRecordingRef.current = false; // Clear ref to stop segment restarts
   
       // Wait for final segment to be sent, then close WebSocket
       setTimeout(() => {

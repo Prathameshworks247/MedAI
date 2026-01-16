@@ -52,7 +52,7 @@ export const ACTIVITY_TYPES = {
 export const appointments = [
   // Rajesh Sharma's appointments
   {
-    id: "APT-2025-00123",
+    id: "6969dd6a7440577e45866c9e",
     appointmentNumber: 3,
     patientId: "PAT-2025-001234",
     patientName: "Rajesh Sharma",
