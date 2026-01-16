@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, User, Calendar, FileText, TrendingUp, Brain, Download, Eye, Play, Upload, CheckCircle, Clock } from 'lucide-react';
+import { Search, User, Calendar, FileText, TrendingUp, Brain, Download, Eye, Play, Upload, CheckCircle, Clock, X, ChevronRight, UserPlus, Stethoscope, Activity } from 'lucide-react';
 import { getAppointmentsByPatient, getPatientById } from '../../data/appointmentData';
 import { apiRequest } from '../../utils/api';
+import NewAppointmentModal from './NewAppointmentModal';
 
 const PatientsPage = () => {
   const [searchParams] = useSearchParams();
@@ -12,6 +13,7 @@ const PatientsPage = () => {
   const [loading, setLoading] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [expandedAppointment, setExpandedAppointment] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const calculateAge = (dob) => {
     if (!dob) return 'N/A';
@@ -386,7 +388,10 @@ const PatientsPage = () => {
                 <Calendar className="w-6 h-6 mr-2 text-primary-600" />
                 Appointment History ({selectedPatient.totalAppointments})
               </h3>
-              <button className="btn-secondary flex items-center">
+              <button 
+                onClick={() => setIsModalOpen(true)}
+                className="btn-secondary flex items-center"
+              >
                 <Upload className="w-4 h-4 mr-2" />
                 Schedule New Appointment
               </button>
@@ -404,6 +409,12 @@ const PatientsPage = () => {
           <p className="text-gray-600">Enter a patient name or ID to view their medical records and appointment history</p>
         </div>
       )}
+      <NewAppointmentModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        patient={selectedPatient}
+        lastAppointment={selectedPatient ? getAppointmentsByPatient(selectedPatient.id)[0] : null}
+      />
     </div>
   );
 };
