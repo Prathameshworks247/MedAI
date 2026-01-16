@@ -3,6 +3,7 @@ from typing import Literal
 import jwt
 from fastapi import Depends, HTTPException, status, APIRouter
 from pydantic import BaseModel
+from datetime import datetime, date
 from bson import ObjectId
 
 from src.db import user_collection
@@ -106,6 +107,7 @@ async def patient_signup(
             detail="User with this email already exists",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    data.date_of_birth = datetime.combine(data.date_of_birth, datetime.min.time())
     new_patient = await create_user(data)
     access_token_expires=timedelta(
         minutes=float(

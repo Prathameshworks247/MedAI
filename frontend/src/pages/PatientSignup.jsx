@@ -15,6 +15,8 @@ const PatientSignup = () => {
     blood_group: '',
     password: '',
     confirmPassword: '',
+    // temp field to avoid 422 error
+    hashed_password: '',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
