@@ -10,7 +10,7 @@ router = APIRouter()
 @router.get("/")
 async def get_patients(
     filter: Optional[str] = None,
-    doctor = Depends(check_doctor_exists)
+    _ = Depends(check_doctor_exists)
 ):
     query: dict = {"role": "patient"}
     if filter:

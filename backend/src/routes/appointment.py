@@ -157,7 +157,7 @@ async def create_appointment(
             appointment_dict["_id"] = str(f"{ObjectId()}-{0}")
         
         # Insert into database
-        result = await appointment_collection.insert_one(appointment_dict)        
+        result = await appointment_collection.insert_one(appointment_dict)
         # Fetch the created appointment
         created_appointment = await appointment_collection.find_one({"_id": result.inserted_id})
         

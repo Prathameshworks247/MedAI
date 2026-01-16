@@ -60,7 +60,7 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
             patient_id: patient.id,
             doctor_id: formData.doctorId,
             appointment_date: new Date(formData.date).toISOString(),
-            status: "SCHEDULED",
+            status: "scheduled",
             chief_complaint: formData.chiefComplaint || (lastAppointment ? "Follow up" : "New Visit"),
             start_time: startTime.toISOString(),
             end_time: endTime.toISOString(),

@@ -1,14 +1,16 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import List
+from typing import List, Literal
 
 class ReportModel(BaseModel):
     report_id: str = Field(...)
+    file_name: str = Field(...)
     uri: str = Field(...)
     summary: str = Field(...)
 
 class TestModel(BaseModel):
     test_id: str = Field(...)
+    file_name: str = Field(...)
     uri: str = Field(...)
     summary: str = Field(...)
 
@@ -16,7 +18,7 @@ class AppointmentModel(BaseModel):
     patient_id: str = Field(...)
     doctor_id: str = Field(...)
     appointment_date: datetime = Field(...)
-    status: str = Field(...)
+    status: Literal["scheduled", "in_progress", "paused", "completed", "cancelled"] = Field(...)
     chief_complaint: str = Field(...)
     start_time: datetime = Field(...)
     end_time: datetime = Field(...)

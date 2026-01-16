@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, User, Calendar, FileText, TrendingUp, Brain, Download, Eye, Play, Upload, CheckCircle, Clock, X, ChevronRight, UserPlus, Stethoscope, Activity } from 'lucide-react';
-import { getAppointmentsByPatient, getPatientById } from '../../data/appointmentData';
+import { Search, User, Calendar, Download, Eye, Play, Upload, CheckCircle, Clock, X, ChevronRight, UserPlus, Stethoscope, Activity } from 'lucide-react';
+import { getPatientById } from '../../data/appointmentData';
 import { apiRequest } from '../../utils/api';
 import NewAppointmentModal from './NewAppointmentModal';
 
@@ -47,7 +47,7 @@ const PatientsPage = () => {
                 scheduledDate: apt.appointment_date ? apt.appointment_date.split('T')[0] : '',
                 scheduledTime: dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 chiefComplaint: apt.chief_complaint,
-                status: apt.status || 'SCHEDULED', // Default
+                status: apt.status || 'scheduled', // Default
                 doctor: apt.doctor, // { name, specialization }
                 session: {
                     activities: [] // Populate based on data presence?
@@ -148,11 +148,11 @@ const PatientsPage = () => {
 
   const getStatusBadge = (status) => {
     const badges = {
-      'SCHEDULED': 'bg-blue-100 text-blue-700',
-      'IN_PROGRESS': 'bg-green-100 text-green-700',
-      'PAUSED': 'bg-yellow-100 text-yellow-700',
-      'COMPLETED': 'bg-gray-100 text-gray-700',
-      'CANCELLED': 'bg-red-100 text-red-700'
+      'scheduled': 'bg-blue-100 text-blue-700',
+      'in_progress': 'bg-green-100 text-green-700',
+      'paused': 'bg-yellow-100 text-yellow-700',
+      'completed': 'bg-gray-100 text-gray-700',
+      'cancelled': 'bg-red-100 text-red-700'
     };
     return badges[status] || 'bg-gray-100 text-gray-700';
   };
@@ -165,8 +165,8 @@ const PatientsPage = () => {
   };
 
   const getContentIcon = (status) => {
-    if (status === 'COMPLETED') return <CheckCircle className="w-4 h-4 text-green-600" />;
-    if (status === 'IN_PROGRESS') return <Clock className="w-4 h-4 text-orange-600 animate-pulse" />;
+    if (status === 'completed') return <CheckCircle className="w-4 h-4 text-green-600" />;
+    if (status === 'in_progress') return <Clock className="w-4 h-4 text-orange-600 animate-pulse" />;
     return <span className="w-4 h-4 rounded-full bg-gray-300"></span>;
   };
 
@@ -227,7 +227,7 @@ const PatientsPage = () => {
 
               {/* Action Buttons */}
               <div className="flex space-x-2">
-                {appointment.status === 'IN_PROGRESS' && (
+                {appointment.status === 'in_progress' && (
                   <button 
                     onClick={() => navigate(`/doctor/session/${appointment.id}`)}
                     className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
@@ -237,7 +237,7 @@ const PatientsPage = () => {
                   </button>
                 )}
                 
-                {appointment.status === 'COMPLETED' && (
+                {appointment.status === 'completed' && (
                   <>
                     <button 
                       onClick={() => setExpandedAppointment(isExpanded ? null : appointment.id)}
@@ -253,7 +253,7 @@ const PatientsPage = () => {
                   </>
                 )}
 
-                {appointment.status === 'SCHEDULED' && (
+                {appointment.status === 'scheduled' && (
                   <button 
                     onClick={() => navigate(`/doctor/session/${appointment.id}`)}
                     className="flex-1 btn-primary flex items-center justify-center"
@@ -265,7 +265,7 @@ const PatientsPage = () => {
               </div>
 
               {/* Expanded Details - Activity Timeline */}
-              {isExpanded && appointment.status === 'COMPLETED' && session && session.activities && (
+              {isExpanded && appointment.status === 'completed' && session && session.activities && (
                 <div className="mt-4 pt-4 border-t border-gray-200">
                   <h6 className="font-semibold text-gray-900 mb-3">Complete Activity Timeline:</h6>
                   <div className="space-y-3">
@@ -433,14 +433,14 @@ const PatientsPage = () => {
           </div>
 
           {/* Scheduled Appointments Section */}
-          {patientAppointments.filter(a => a.status === 'SCHEDULED').length > 0 && (
+          {patientAppointments.filter(a => a.status === 'scheduled').length > 0 && (
             <div className="mb-8">
                 <h3 className="text-2xl font-bold text-gray-900 flex items-center mb-4">
                     <Clock className="w-6 h-6 mr-2 text-primary-600" />
                     Scheduled Appointments
                 </h3>
                 <div className="grid gap-4">
-                    {patientAppointments.filter(a => a.status === 'SCHEDULED').map(apt => (
+                    {patientAppointments.filter(a => a.status === 'scheduled').map(apt => (
                         <div key={apt.id} className="bg-white border-l-4 border-blue-500 rounded-lg shadow-sm p-4 hover:shadow-md transition-all">
                             <div className="flex justify-between items-start">
                                 <div>
@@ -477,7 +477,7 @@ const PatientsPage = () => {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-2xl font-bold text-gray-900 flex items-center">
                 <Calendar className="w-6 h-6 mr-2 text-primary-600" />
-                Appointment History ({patientAppointments.filter(a => a.status !== 'SCHEDULED').length})
+                Appointment History ({patientAppointments.filter(a => a.status !== 'scheduled').length})
               </h3>
               <button 
                 onClick={() => setIsModalOpen(true)}
@@ -487,7 +487,7 @@ const PatientsPage = () => {
                 Schedule New Appointment
               </button>
             </div>
-            <AppointmentTimeline appointments={patientAppointments.filter(a => a.status !== 'SCHEDULED')} />
+            <AppointmentTimeline appointments={patientAppointments.filter(a => a.status !== 'scheduled')} />
           </div>
         </>
       )}
@@ -507,7 +507,7 @@ const PatientsPage = () => {
             if (selectedPatient) fetchAppointments(selectedPatient.id); // Refresh after close
         }}
         patient={selectedPatient}
-        lastAppointment={patientAppointments.length > 0 ? patientAppointments[0] : null}
+        lastAppointment={patientAppointments.length && patientAppointments[0].status === 'completed' ? patientAppointments[0] : null}
       />
     </div>
   );
