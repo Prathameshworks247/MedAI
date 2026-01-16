@@ -7,8 +7,8 @@ from bson import ObjectId
 
 from src.db import user_collection
 from src.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, password_hash
-from src.models.user import PatientCreate, DoctorCreate, UserBase, UserResponse
-from src.middlewares.auth import get_current_user, get_user_by_id
+from src.models.user import PatientCreate, DoctorCreate
+from src.middlewares.auth import get_current_user
 
 class Login(BaseModel):
     email: str

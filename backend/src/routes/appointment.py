@@ -2,6 +2,7 @@ from fastapi import APIRouter, UploadFile, File, WebSocket, WebSocketDisconnect,
 from bson import ObjectId
 from datetime import datetime
 from typing import Optional
+
 from src.models.appointment import AppointmentModel
 from src.db import appointment_collection
 from src.services.streaming_stt import StreamingTranscriber
@@ -10,7 +11,11 @@ from src.services.whisper_service import transcribe_audio_file
 router = APIRouter()
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_appointment(appointment: AppointmentModel):
+async def create_appointment(
+    appointment: AppointmentModel,
+    appointment_type: str = Query("new", alias="type"),
+    prev_appointment_id: Optional[str] = Query(None)
+):
     """
     Create a new appointment in the database.
     
@@ -33,10 +38,26 @@ async def create_appointment(appointment: AppointmentModel):
         # Initialize empty discussion if not provided
         if "discussion" not in appointment_dict:
             appointment_dict["discussion"] = ""
+
+        if appointment_type == "old":
+            if not prev_appointment_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Previous appointment ID not provided"
+                )
+            prev_appointment = await appointment_collection.find_one({"_id": ObjectId(prev_appointment_id)})
+            if not prev_appointment:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Previous appointment with ID {prev_appointment_id} not found"
+                )
+            appointment_number = prev_appointment_id.split("-")[1]
+            appointment_dict["_id"] = str(f"{ObjectId()}-{int(appointment_number) + 1}")
+        else:
+            appointment_dict["_id"] = str(f"{ObjectId()}-{0}")
         
         # Insert into database
-        result = await appointment_collection.insert_one(appointment_dict)
-        
+        result = await appointment_collection.insert_one(appointment_dict)        
         # Fetch the created appointment
         created_appointment = await appointment_collection.find_one({"_id": result.inserted_id})
         

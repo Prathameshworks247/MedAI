@@ -17,6 +17,7 @@ class AppointmentModel(BaseModel):
     doctor_id: str = Field(...)
     appointment_date: datetime = Field(...)
     status: str = Field(...)
+    chief_complaint: str = Field(...)
     start_time: datetime = Field(...)
     end_time: datetime = Field(...)
     discussion: str = Field(...)
