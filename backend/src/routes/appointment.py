@@ -3,7 +3,7 @@ from bson import ObjectId
 from datetime import datetime
 from typing import Optional
 
-from src.models.appointment import AppointmentModel
+from src.models.appointment import AppointmentModel, UpdateAppointmentModel
 from src.middlewares.auth import check_doctor_exists
 from src.db import appointment_collection, user_collection
 from src.services.streaming_stt import StreamingTranscriber
@@ -258,6 +258,65 @@ async def create_appointment(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create appointment: {str(e)}"
+        )
+
+@router.patch("/{appointment_id}")
+async def update_appointment(appointment_id: str, appointment_update: UpdateAppointmentModel):
+    """
+    Update an appointment by ID.
+    Only provided fields will be updated.
+    """
+    try:
+        # Create update dictionary with only set fields
+        update_data = appointment_update.model_dump(exclude_unset=True)
+        
+        if not update_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No fields provided for update"
+            )
+            
+        # Add updated_at timestamp
+        update_data["updated_at"] = datetime.now()
+        
+        # Try ObjectId first
+        try:
+             query = {"_id": ObjectId(appointment_id)}
+        except:
+             query = {"_id": appointment_id}
+
+        # Perform update
+        result = await appointment_collection.update_one(
+            query,
+            {"$set": update_data}
+        )
+        
+        if result.matched_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Appointment with ID {appointment_id} not found"
+            )
+            
+        # Fetch updated appointment
+        updated_appointment = await appointment_collection.find_one(query)
+        
+        # Format for response
+        if updated_appointment:
+            updated_appointment["_id"] = str(updated_appointment["_id"])
+            # Convert datetime objects to ISO format strings
+            for key in ["appointment_date", "start_time", "end_time", "created_at", "updated_at"]:
+                if key in updated_appointment and isinstance(updated_appointment[key], datetime):
+                    updated_appointment[key] = updated_appointment[key].isoformat()
+        
+        return updated_appointment
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating appointment: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update appointment: {str(e)}"
         )
 
 @router.post("/transcribe-file")

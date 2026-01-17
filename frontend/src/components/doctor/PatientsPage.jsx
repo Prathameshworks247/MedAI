@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, User, Calendar, Download, Eye, Play, Upload, CheckCircle, Clock, X, ChevronRight, UserPlus, Stethoscope, Activity } from 'lucide-react';
+import { Search, User, Calendar, Download, Eye, Play, Upload, CheckCircle, Clock, Stethoscope, Activity } from 'lucide-react';
 import { getPatientById } from '../../data/appointmentData';
 import { apiRequest } from '../../utils/api';
 import NewAppointmentModal from './NewAppointmentModal';
@@ -35,10 +35,12 @@ const PatientsPage = () => {
 
   const fetchAppointments = async (patientId) => {
     try {
-      const [scheduledRes, completedRes, totalRes] = await Promise.all([
+      const [scheduledRes, completedRes, totalRes, inProgressRes, pausedRes] = await Promise.all([
         apiRequest(`/appointments/?patient_id=${patientId}&appointment_status=scheduled`),
         apiRequest(`/appointments/?patient_id=${patientId}&appointment_status=completed&limit=10`),
-        apiRequest(`/appointments/total?patient_id=${patientId}`)
+        apiRequest(`/appointments/total?patient_id=${patientId}`),
+        apiRequest(`/appointments/?patient_id=${patientId}&appointment_status=in_progress`),
+        apiRequest(`/appointments/?patient_id=${patientId}&appointment_status=paused`)
       ]);
 
       let allAppointments = [];
@@ -47,13 +49,6 @@ const PatientsPage = () => {
         const dateObj = new Date(apt.start_time);
         return {
             id: apt._id,
-            // For scheduled, we might not have a reliable countdown if we don't have all historic data, 
-            // but we can try our best or just use strict index if needed. 
-            // However, the UI uses it for "Appointment #X". 
-            // For this specific view, exact historic numbering might be less critical or we can accept it's partial.
-            // Let's rely on the backend provided index or just simple client side indexing
-            appointmentNumber: '?', // Temporary placeholder or logic
-            type: apt.type === 'new' ? 'NEW_PATIENT' : 'FOLLOW_UP',
             scheduledDate: apt.appointment_date ? apt.appointment_date.split('T')[0] : '',
             scheduledTime: dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             chiefComplaint: apt.chief_complaint,
@@ -78,6 +73,18 @@ const PatientsPage = () => {
         return apt;
       };
 
+      // Process In Progress
+      if (inProgressRes.success) {
+          const inProgressMapped = inProgressRes.data.map(apt => processActivities(mapAppointment(apt)));
+          allAppointments = [...allAppointments, ...inProgressMapped];
+      }
+
+      // Process Paused
+      if (pausedRes.success) {
+          const pausedMapped = pausedRes.data.map(apt => processActivities(mapAppointment(apt)));
+          allAppointments = [...allAppointments, ...pausedMapped];
+      }
+
       // Process Scheduled
       if (scheduledRes.success) {
           const scheduledMapped = scheduledRes.data.map(apt => processActivities(mapAppointment(apt)));
@@ -92,12 +99,6 @@ const PatientsPage = () => {
 
       // Sort by date desc
       allAppointments.sort((a, b) => new Date(b.scheduledDate + 'T' + b.scheduledTime) - new Date(a.scheduledDate + 'T' + a.scheduledTime));
-      
-      // Fix numbering based on sorted combined list or total count
-      // This is a rough approximation since we don't have ALL appointments
-      allAppointments.forEach((apt, i) => {
-        apt.appointmentNumber = allAppointments.length - i; 
-      });
 
       setPatientAppointments(allAppointments);
 
@@ -183,6 +184,20 @@ const PatientsPage = () => {
     fetchAppointments(patient.id);
   };
 
+  const handleStartSession = async (appointmentId) => {
+    try {
+        await apiRequest(`/appointments/${appointmentId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'in_progress' })
+        });
+        navigate(`/doctor/session/${appointmentId}`);
+    } catch (e) {
+        console.error("Failed to start session", e);
+        // Navigate anyway to not block the user
+        navigate(`/doctor/session/${appointmentId}`);
+    }
+  };
+
   const getStatusBadge = (status) => {
     const badges = {
       'scheduled': 'bg-blue-100 text-blue-700',
@@ -192,13 +207,6 @@ const PatientsPage = () => {
       'cancelled': 'bg-red-100 text-red-700'
     };
     return badges[status] || 'bg-gray-100 text-gray-700';
-  };
-
-  const getTypeBadge = (type, appointmentNumber) => {
-    if (type === 'NEW_PATIENT') {
-      return <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-semibold">🆕 NEW PATIENT</span>;
-    }
-    return <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-semibold">🔄 Visit #{appointmentNumber}</span>;
   };
 
   const getContentIcon = (status) => {
@@ -223,7 +231,7 @@ const PatientsPage = () => {
                   <div className="flex items-center space-x-2 mb-1">
                     <Calendar className="w-5 h-5 text-gray-600" />
                     <h4 className="text-lg font-bold text-gray-900">
-                      {appointmentNo == 0 ? "Baseline Appointment" : `Continued Visit #${appointmentNo}`}
+                      {appointmentNo == 0 ? "Baseline Visit" : `Follow Up Visit #${appointmentNo}`}
                     </h4>                    
                   </div>
                   <p className="text-base font-semibold mb-1">Doctor: {appointment.doctor.name}</p>
@@ -262,7 +270,7 @@ const PatientsPage = () => {
               <div className="flex space-x-2">
                 {appointment.status === 'in_progress' && (
                   <button 
-                    onClick={() => navigate(`/doctor/session/${appointment.id}`)}
+                    onClick={() => handleStartSession(appointment.id)}
                     className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
                   >
                     <Play className="w-4 h-4 mr-2" />
@@ -288,7 +296,7 @@ const PatientsPage = () => {
 
                 {appointment.status === 'scheduled' && (
                   <button 
-                    onClick={() => navigate(`/doctor/session/${appointment.id}`)}
+                    onClick={() => handleStartSession(appointment.id)}
                     className="flex-1 btn-primary flex items-center justify-center"
                   >
                     <Play className="w-4 h-4 mr-2" />
@@ -411,7 +419,7 @@ const PatientsPage = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-semibold text-gray-900">{patient.name}</p>
-                    <p className="text-sm text-gray-600">{patient.age} years • {patient.gender} • {patient.id}</p>
+                    <p className="text-sm text-gray-600">Age: {patient.age} years • <span className="capitalize">Gender: {patient.gender}</span> • ID: {patient.id}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-gray-700">{patient.totalAppointments} appointments</p>
@@ -448,7 +456,7 @@ const PatientsPage = () => {
                   <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-700">
                     <p><span className="font-semibold">Patient ID:</span> {selectedPatient.id}</p>
                     <p><span className="font-semibold">Age:</span> {selectedPatient.age} years</p>
-                    <p><span className="font-semibold">Gender:</span> {selectedPatient.gender}</p>
+                    <p className='capitalize'><span className="font-semibold">Gender:</span> {selectedPatient.gender}</p>
                     <p><span className="font-semibold">Blood Group:</span> {selectedPatient.bloodGroup}</p>
                     <p><span className="font-semibold">Phone:</span> {selectedPatient.phone}</p>
                     <p><span className="font-semibold">Registered:</span> {selectedPatient.registeredDate}</p>
@@ -464,6 +472,58 @@ const PatientsPage = () => {
               </div>
             </div>
           </div>
+
+          {/* Active Appointments Section */}
+          {patientAppointments.filter(a => ['in_progress', 'paused'].includes(a.status)).length > 0 && (
+            <div className="mb-8">
+                <h3 className="text-2xl font-bold text-gray-900 flex items-center mb-4">
+                    <Activity className="w-6 h-6 mr-2 text-green-600 animate-pulse" />
+                    Active Sessions
+                </h3>
+                <div className="grid gap-4">
+                    {patientAppointments.filter(a => ['in_progress', 'paused'].includes(a.status)).map(apt => {
+                        const appointmentNo = apt.id.split('-')[1];
+                        return (
+                            <div key={apt.id} className={`bg-white border-l-4 ${apt.status === 'in_progress' ? 'border-green-500 bg-green-50' : 'border-yellow-500 bg-yellow-50'} rounded-lg shadow-sm p-4 hover:shadow-md transition-all`}>
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <div className="flex items-center space-x-2 mb-3">
+                                            <span className={`text-xs px-2 py-1 rounded-full font-semibold uppercase ${apt.status === 'in_progress' ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'}`}>
+                                                {apt.status.replace('_', ' ')}
+                                            </span>                                        
+                                        </div>
+                                        <div className="flex items-center space-x-2 mb-2">
+                                            <Calendar className="w-5 h-5 text-gray-600" />
+                                            <h4 className="text-lg font-bold text-gray-900">
+                                                {appointmentNo == 0 ? "Baseline Visit" : `Follow Up Visit #${appointmentNo}`}
+                                            </h4>                    
+                                        </div>
+                                        <p className="text-gray-700 mb-3"><span className="font-semibold">Complaint:</span> {apt.chiefComplaint}</p>
+                                        <div className="flex items-center space-x-4">
+                                            <p className="text-sm text-gray-700 bg-white bg-opacity-50 px-2 py-1 rounded flex items-center">
+                                                <Stethoscope className="w-3 h-3 mr-1" />
+                                                {apt.doctor?.name}
+                                            </p>
+                                            <p className="text-sm text-gray-600 italic flex items-center">
+                                                <Clock className="w-3 h-3 mr-1" />
+                                                Started: {apt.scheduledDate} at {apt.scheduledTime}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => handleStartSession(apt.id)}
+                                        className={`px-4 py-2 ${apt.status === 'in_progress' ? 'bg-green-600 hover:bg-green-700' : 'bg-yellow-600 hover:bg-yellow-700'} text-white rounded-lg transition-colors flex items-center font-medium shadow-sm`}
+                                    >
+                                        <Play className="w-4 h-4 mr-2" />
+                                        {apt.status === 'in_progress' ? 'Resume Session' : 'Continue Session'}
+                                    </button>
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
+          )}
 
           {/* Scheduled Appointments Section */}
           {patientAppointments.filter(a => a.status === 'scheduled').length > 0 && (
@@ -489,7 +549,7 @@ const PatientsPage = () => {
                                     </div>
                                 </div>
                                 <button 
-                                    onClick={() => navigate(`/doctor/session/${apt.id}`)}
+                                    onClick={() => handleStartSession(apt.id)}
                                     className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center font-medium"
                                 >
                                     <Play className="w-4 h-4 mr-2" />
@@ -507,7 +567,7 @@ const PatientsPage = () => {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-2xl font-bold text-gray-900 flex items-center">
                 <Calendar className="w-6 h-6 mr-2 text-primary-600" />
-                Appointment History ({patientAppointments.filter(a => a.status !== 'scheduled').length})
+                Appointment History ({patientAppointments.filter(a => !['scheduled', 'in_progress', 'paused'].includes(a.status)).length})
               </h3>
               <button 
                 onClick={() => setIsModalOpen(true)}
@@ -517,7 +577,7 @@ const PatientsPage = () => {
                 Schedule New Appointment
               </button>
             </div>
-            <AppointmentTimeline appointments={patientAppointments.filter(a => a.status !== 'scheduled')} />
+            <AppointmentTimeline appointments={patientAppointments.filter(a => !['scheduled', 'in_progress', 'paused'].includes(a.status))} />
           </div>
         </>
       )}
@@ -544,4 +604,3 @@ const PatientsPage = () => {
 };
 
 export default PatientsPage;
-

@@ -76,8 +76,18 @@ const DoctorDashboard = () => {
     return <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-semibold">🔄 CONTINUATION {appointmentNumber ? `(Visit #${appointmentNumber})` : ''}</span>;
   };
 
-  const handleStartSession = (appointmentId) => {
-    navigate(`/doctor/session/${appointmentId}`);
+  const handleStartSession = async (appointmentId) => {
+    try {
+        await apiRequest(`/appointments/${appointmentId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'in_progress' })
+        });
+        navigate(`/doctor/session/${appointmentId}`);
+    } catch (e) {
+        console.error("Failed to start session", e);
+        // Navigate anyway to not block the user
+        navigate(`/doctor/session/${appointmentId}`);
+    }
   };
 
   const handleViewPatient = (patientId) => {
