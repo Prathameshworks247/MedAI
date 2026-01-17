@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import { Search, User, Calendar, Download, Eye, Play, Upload, CheckCircle, Clock, Stethoscope, Activity } from 'lucide-react';
 import { getPatientById } from '../../data/appointmentData';
 import { apiRequest } from '../../utils/api';
 import NewAppointmentModal from './NewAppointmentModal';
 
 const PatientsPage = () => {
+const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
@@ -268,7 +270,7 @@ const PatientsPage = () => {
 
               {/* Action Buttons */}
               <div className="flex space-x-2">
-                {appointment.status === 'in_progress' && (
+                {appointment.status === 'in_progress' && appointment.doctor.id === user._id && (
                   <button 
                     onClick={() => handleStartSession(appointment.id)}
                     className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
@@ -294,7 +296,7 @@ const PatientsPage = () => {
                   </>
                 )}
 
-                {appointment.status === 'scheduled' && (
+                {appointment.status === 'scheduled' && appointment.doctor.id === user._id && (
                   <button 
                     onClick={() => handleStartSession(appointment.id)}
                     className="flex-1 btn-primary flex items-center justify-center"
@@ -498,7 +500,7 @@ const PatientsPage = () => {
                                                 {appointmentNo == 0 ? "Baseline Visit" : `Follow Up Visit #${appointmentNo}`}
                                             </h4>                    
                                         </div>
-                                        <p className="text-gray-700 mb-3"><span className="font-semibold">Complaint:</span> {apt.chiefComplaint}</p>
+                                        <p className="text-gray-700 mb-1.5"><span className="font-semibold">Complaint:</span> {apt.chiefComplaint}</p>
                                         <div className="flex items-center space-x-4">
                                             <p className="text-sm text-gray-700 bg-white bg-opacity-50 px-2 py-1 rounded flex items-center">
                                                 <Stethoscope className="w-3 h-3 mr-1" />
@@ -510,13 +512,13 @@ const PatientsPage = () => {
                                             </p>
                                         </div>
                                     </div>
-                                    <button 
+                                    {apt.doctor?.id === user._id && <button 
                                         onClick={() => handleStartSession(apt.id)}
                                         className={`px-4 py-2 ${apt.status === 'in_progress' ? 'bg-green-600 hover:bg-green-700' : 'bg-yellow-600 hover:bg-yellow-700'} text-white rounded-lg transition-colors flex items-center font-medium shadow-sm`}
                                     >
                                         <Play className="w-4 h-4 mr-2" />
                                         {apt.status === 'in_progress' ? 'Resume Session' : 'Continue Session'}
-                                    </button>
+                                    </button>}
                                 </div>
                             </div>
                         )
@@ -548,13 +550,13 @@ const PatientsPage = () => {
                                         <p className="text-sm text-gray-500 italic">"{apt.scheduledDate} at {apt.scheduledTime}"</p>
                                     </div>
                                 </div>
-                                <button 
+                                {apt.doctor?.id === user._id && <button 
                                     onClick={() => handleStartSession(apt.id)}
                                     className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center font-medium"
                                 >
                                     <Play className="w-4 h-4 mr-2" />
                                     Start Session
-                                </button>
+                                </button>}
                             </div>
                         </div>
                     ))}

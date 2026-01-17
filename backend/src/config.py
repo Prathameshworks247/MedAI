@@ -7,6 +7,7 @@ load_dotenv()
 
 PORT = os.getenv('PORT', '8000')
 MONGODB_URI = os.getenv('MONGODB_URI')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
 # JWT Configuration - with defaults for development
 SECRET_KEY = os.getenv('SECRET_KEY')

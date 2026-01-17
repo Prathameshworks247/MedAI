@@ -18,6 +18,7 @@ class TestModel(BaseModel):
     """Test document containing multiple tests"""
     doc_id: str = Field(...)
     doc_name: str = Field(...)
+    uri: str = Field(...)
     summary: str = Field(...)
     tests: List[TestItem] = Field(...)
 

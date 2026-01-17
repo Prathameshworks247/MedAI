@@ -73,7 +73,8 @@ async def read_appointments(
                     if doctor:
                          appointment["doctor"] = {
                              "name": doctor.get("full_name", "Unknown"),
-                             "specialization": doctor.get("specialization", "General")
+                             "specialization": doctor.get("specialization", "General"),
+                             "id": str(doctor["_id"])
                          }
                 except:
                     # Fallback if doctor_id is not valid ObjectId
