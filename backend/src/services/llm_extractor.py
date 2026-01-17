@@ -1,37 +1,15 @@
+# llm/extractor.py
 
-import google.generativeai as genai,
-from src.models.appointment import AppointmentModel
-import os
+from langchain.output_parsers import PydanticOutputParser  # pyright: ignore[reportMissingImports]
+from langchain.schema.runnable import RunnableSequence  # pyright: ignore[reportMissingImports]
+from src.models.llm import ExtractionResult
+from llm.prompts import EXTRACTION_PROMPT
+from llm.gemini import llm
 
-model = genai.GenerativeModel("gemini-2.5-flash")
+parser = PydanticOutputParser(pydantic_object=ExtractionResult)
 
-def extract_clinical_data(text: str) -> AppointmentModel:
-    prompt = f"""
-You are a clinical documentation assistant.
-
-Extract structured clinical information from the text below.
-
-RULES:
-- Return ONLY valid JSON
-- DO NOT include markdown
-- DO NOT include explanations
-- Follow this JSON schema exactly
-
-SCHEMA:
-{AppointmentModel.model_json_schema()}
-
-TEXT:
-{text}
-"""
-
-    response = model.generate_content(
-        prompt,
-        generation_config={
-            "temperature": 0,
-            "response_mime_type": "application/json"
-        }
-    )
-
-    return AppointmentModel.model_validate_json(
-        response.text
-    )
+chain = (
+    EXTRACTION_PROMPT
+    | llm
+    | parser
+)

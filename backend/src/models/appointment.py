@@ -2,17 +2,26 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import List, Literal
 
+
 class ReportModel(BaseModel):
     report_id: str = Field(...)
     file_name: str = Field(...)
-    uri: str = Field(...)
+    uri: str = Field(...) 
     summary: str = Field(...)
 
-class TestModel(BaseModel):
-    test_id: str = Field(...)
-    file_name: str = Field(...)
-    uri: str = Field(...)
+class TestItem(BaseModel):
+    """Individual test within a test document"""
+    name: str = Field(...)
+    description: str = Field(default="")  # Optional, defaults to empty string
+
+class TestDocument(BaseModel):
+    """Test document containing multiple tests"""
+    doc_id: str = Field(...)
+    doc_name: str = Field(...)
     summary: str = Field(...)
+    tests: List[TestItem] = Field(...)
+
+
 
 class AppointmentModel(BaseModel):
     patient_id: str = Field(...)
@@ -25,9 +34,8 @@ class AppointmentModel(BaseModel):
     discussion: str = Field(...)
     discussion_summary: str = Field(...)
     reports: List[ReportModel] = Field(...)
-    tests: List[TestModel] = Field(...)
+    tests: List[TestDocument] = Field(...)
     diagnosis: dict = Field(...)    
     created_at: datetime = Field(default=datetime.now())
     updated_at: datetime = Field(default=datetime.now())
     
-

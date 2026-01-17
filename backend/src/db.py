@@ -1,7 +1,7 @@
 from pymongo import AsyncMongoClient, server_api
 from typing import Any
 import os
-
+from datetime import datetime
 from src.config import MONGODB_URI
 
 # Determine if we're in development mode
@@ -36,3 +36,4 @@ async def test_connection():
         print("MongoDB connection successful!")
     except Exception as e:
         print(f"MongoDB connection test failed: {e}")
+        

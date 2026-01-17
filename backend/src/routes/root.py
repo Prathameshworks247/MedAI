@@ -4,6 +4,7 @@ from src.routes.appointment import router as appointment_router
 from src.routes.patient import router as patient_router
 from src.routes.doctor import router as doctor_router
 from src.routes.auth import router as auth_router
+from src.routes.ingest import router as ingest_router
 
 router = APIRouter()
 
@@ -30,4 +31,10 @@ router.include_router(
     doctor_router,
     prefix="/doctors",
     tags=["doctors"],
+)
+
+router.include_router(
+    ingest_router,
+    prefix="/ingest",
+    tags=["ingest"],
 )

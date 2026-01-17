@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, EmailStr
-from typing import Literal
-from datetime import date
+from typing import Literal, List
+from datetime import date, datetime
 
 class UserBase(BaseModel):
     email: EmailStr    
@@ -10,6 +10,21 @@ class UserBase(BaseModel):
     hashed_password: str 
     # temp fields for signup
     password: str
+
+class MedicalHistoryModel(BaseModel):
+    medical_history_id: str = Field(...)
+    file_name: str = Field(...)
+    uri: str = Field(...)
+    summary: str = Field(...)
+    created_at: datetime = Field(default=datetime.now())
+    updated_at: datetime = Field(default=datetime.now())
+
+class TimeSeriesModel(BaseModel):
+    patient_id: str = Field(...)
+    metric: str = Field(...)
+    value: float = Field(...)
+    unit: str = Field(...)
+    timestamp: datetime = Field(...)
 
 class PatientCreate(UserBase):
     password: str
@@ -26,6 +41,7 @@ class DoctorCreate(UserBase):
 
 class PatientInDB(PatientCreate):
     id: str = Field(alias="_id")
+    medical_history: List[MedicalHistoryModel] = Field(...)
     class Config:
         populate_by_name = True
 

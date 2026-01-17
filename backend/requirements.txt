@@ -7,8 +7,10 @@ soundfile
 pyjwt
 pwdlib[argon2]
 google-generativeai
-langchain 
+langchain
 langchain-google-genai 
 pydantic
+
 langchain-community
 pydub
+pdfplumber
