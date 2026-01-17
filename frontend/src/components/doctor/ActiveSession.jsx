@@ -1,14 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Square, Clock, CheckCircle, Upload, FileText, Brain, Download, Eye, Plus, Mic, FileCheck, TestTube2, Sparkles, MessageSquare } from 'lucide-react';
-import { appointments, ACTIVITY_TYPES, isRequiredActivitiesComplete, getActivityIcon } from '../../data/appointmentData';
+import { ArrowLeft, Play, Square, Clock, CheckCircle, Upload, FileText, Brain, Download, Eye, Plus, Mic, FileCheck, TestTube2, Sparkles, MessageSquare, Loader } from 'lucide-react';
+import { ACTIVITY_TYPES, isRequiredActivitiesComplete, getActivityIcon } from '../../data/appointmentData';
+import { apiRequest } from '../../utils/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 const ActiveSession = () => {
   const { appointmentId } = useParams();
   const navigate = useNavigate();
-  const appointment = appointments.find(a => a.id === appointmentId);
+  
+  const [appointment, setAppointment] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const [expandedActivity, setExpandedActivity] = useState(null);
   
   // Audio recording state
@@ -28,14 +33,6 @@ const ActiveSession = () => {
   const segmentChunksRef = useRef([]); // Persist chunks across MediaRecorder restarts
   const isRecordingRef = useRef(false); // Track recording state to avoid closure issues
   
-  if (!appointment) {
-    return <div className="p-6">Appointment not found</div>;
-  }
-
-  const session = appointment.session;
-  const activities = session?.activities || [];
-  const requiredComplete = isRequiredActivitiesComplete(session);
-
   // Format duration as MM:SS
   const formatDuration = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -67,15 +64,69 @@ const ActiveSession = () => {
           if (data.type === 'partial_transcript') {
             // Append partial transcript to existing transcription
             setTranscription(prev => {
-              const newText = prev + (prev ? ' ' : '') + data.text;
+              // Only add space if previous ends with word char (simplistic)
+              const newText = prev + (prev && !prev.endsWith(' ') ? ' ' : '') + data.text;
               return newText;
             });
             setPartialTranscript(data.text);
           } else if (data.type === 'final_transcript') {
             // Append final transcript to existing transcription
-            setTranscription(prev => prev + (prev ? ' ' : '') + data.text);
+            setTranscription(prev => prev + (prev && !prev.endsWith(' ') ? ' ' : '') + data.text);
             setPartialTranscript('');
             console.log('✓ Final transcript received and appended');
+            
+            // Also update the appointment state to reflect the new transcription in activities
+             setAppointment(prev => {
+                if (!prev) return prev;
+                // Add or update recording activity
+                 const updatedActivities = [...(prev.session.activities || [])];
+                 const recIndex = updatedActivities.findIndex(a => a.type === ACTIVITY_TYPES.RECORDING);
+                 // We need to use functional update properly, access current value within scope or use a ref for latest transcription if needed
+                 // But here we rely on the data.text which is the incremental final transcript.
+                 // Actually, setTranscription updates state, but here we might be out of sync if we just append data.text to `transcription` (state).
+                 // However, for UI update, it's "good enough" to just force a re-render or update locally.
+                 // Better approach: Use the backend data on next fetch, but for instant feedback:
+                 
+                 // If we had the full text in data.text it would be easier.
+                 // Let's assume user expects to see it in the timeline immediately.
+                 // We will skip updating the complex appointment object for now to avoid state bugs, 
+                 // as the live transcription view shows the text anyway. 
+                 // But wait, the timeline view reads from `appointment.session.activities`.
+                 // So we SHOULD update it.
+                 
+                 // Let's iterate:
+                 const currentTrans = prev.session.activities?.[recIndex]?.data?.transcription || "";
+                 const newTrans = currentTrans + (currentTrans ? ' ' : '') + data.text;
+                 
+                 const newActivity = {
+                    id: 'rec-' + prev.id,
+                    type: ACTIVITY_TYPES.RECORDING,
+                    title: 'Consultation Recording',
+                    timestamp: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    data: {
+                        duration: 'Recording...',
+                        transcription: newTrans 
+                    }
+                 };
+
+                 if (recIndex >= 0) {
+                     updatedActivities[recIndex] = newActivity;
+                 } else {
+                     updatedActivities.push(newActivity);
+                 }
+                 
+                 return {
+                     ...prev,
+                     session: {
+                         ...prev.session,
+                         activities: updatedActivities,
+                         requiredCompleted: {
+                             ...prev.session.requiredCompleted,
+                             recording: true
+                         }
+                     }
+                 };
+             });
           }
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -97,145 +148,142 @@ const ActiveSession = () => {
     }
   };
 
-// Replace the handleStartRecording function with this:
-
-const handleStartRecording = async () => {
-  try {
-    // Request microphone access
-    const stream = await navigator.mediaDevices.getUserMedia({ 
-      audio: {
-        channelCount: 1,
-        sampleRate: 16000,
-        echoCancellation: true,
-        noiseSuppression: true
-      } 
-    });
-    
-    streamRef.current = stream;
-
-    // Connect to WebSocket
-    connectWebSocket();
-
-    // Wait for WebSocket to connect
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Check MIME type support
-    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-      ? 'audio/webm;codecs=opus'
-      : 'audio/webm';
-
-    console.log('Using MIME type:', mimeType);
-
-    // Create MediaRecorder
-    const mediaRecorder = new MediaRecorder(stream, {
-      mimeType: mimeType,
-      audioBitsPerSecond: 128000
-    });
-    
-    mediaRecorderRef.current = mediaRecorder;
-
-    // Reset chunks array for new recording session
-    segmentChunksRef.current = [];
-    
-    // Collect chunks as they arrive (fires every 1 second due to timeslice)
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        segmentChunksRef.current.push(event.data);
-        const totalSize = segmentChunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0);
-        console.log(`📦 Chunk ${segmentChunksRef.current.length}: ${event.data.size} bytes (segment total: ${(totalSize / 1024).toFixed(1)} KB)`);
-      }
-    };
-
-    // When recording stops, send the complete segment
-    mediaRecorder.onstop = () => {
-      const recorder = mediaRecorderRef.current;
+  const handleStartRecording = async () => {
+    try {
+      // Request microphone access
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          channelCount: 1,
+          sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true
+        } 
+      });
       
-      // Request any remaining data before processing
-      if (recorder && recorder.state === 'inactive' && segmentChunksRef.current.length > 0) {
-        const completeSegment = new Blob(segmentChunksRef.current, { type: mimeType });
-        const segmentSizeKB = completeSegment.size / 1024;
+      streamRef.current = stream;
+  
+      // Connect to WebSocket
+      connectWebSocket();
+  
+      // Wait for WebSocket to connect
+      await new Promise(resolve => setTimeout(resolve, 500));
+  
+      // Check MIME type support
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm';
+  
+      console.log('Using MIME type:', mimeType);
+  
+      // Create MediaRecorder
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: mimeType,
+        audioBitsPerSecond: 128000
+      });
+      
+      mediaRecorderRef.current = mediaRecorder;
+  
+      // Reset chunks array for new recording session
+      segmentChunksRef.current = [];
+      
+      // Collect chunks as they arrive (fires every 1 second due to timeslice)
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          segmentChunksRef.current.push(event.data);
+          const totalSize = segmentChunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0);
+          console.log(`📦 Chunk ${segmentChunksRef.current.length}: ${event.data.size} bytes (segment total: ${(totalSize / 1024).toFixed(1)} KB)`);
+        }
+      };
+  
+      // When recording stops, send the complete segment
+      mediaRecorder.onstop = () => {
+        const recorder = mediaRecorderRef.current;
         
-        console.log(`📦 Segment complete: ${completeSegment.size} bytes (${segmentSizeKB.toFixed(1)} KB) from ${segmentChunksRef.current.length} chunks`);
-        
-        if (websocketRef.current?.readyState === WebSocket.OPEN && completeSegment.size > 1000) {
-          // Only send if segment is meaningful (at least 1KB)
-          completeSegment.arrayBuffer().then(buffer => {
-            console.log(`📤 Sending WebM segment: ${buffer.byteLength} bytes (${(buffer.byteLength / 1024).toFixed(1)} KB)`);
-            websocketRef.current.send(buffer);
-          }).catch(error => {
-            console.error('Error sending segment:', error);
-          });
-        } else if (completeSegment.size <= 1000) {
-          console.warn(`⚠ Segment too small (${segmentSizeKB.toFixed(1)} KB), skipping`);
+        // Request any remaining data before processing
+        if (recorder && recorder.state === 'inactive' && segmentChunksRef.current.length > 0) {
+          const completeSegment = new Blob(segmentChunksRef.current, { type: mimeType });
+          const segmentSizeKB = completeSegment.size / 1024;
+          
+          console.log(`📦 Segment complete: ${completeSegment.size} bytes (${segmentSizeKB.toFixed(1)} KB) from ${segmentChunksRef.current.length} chunks`);
+          
+          if (websocketRef.current?.readyState === WebSocket.OPEN && completeSegment.size > 1000) {
+            // Only send if segment is meaningful (at least 1KB)
+            completeSegment.arrayBuffer().then(buffer => {
+              console.log(`📤 Sending WebM segment: ${buffer.byteLength} bytes (${(buffer.byteLength / 1024).toFixed(1)} KB)`);
+              websocketRef.current.send(buffer);
+            }).catch(error => {
+              console.error('Error sending segment:', error);
+            });
+          } else if (completeSegment.size <= 1000) {
+            console.warn(`⚠ Segment too small (${segmentSizeKB.toFixed(1)} KB), skipping`);
+          }
+          
+          // Clear for next segment
+          segmentChunksRef.current = [];
         }
         
-        // Clear for next segment
-        segmentChunksRef.current = [];
-      }
-      
-      // Automatically start next segment if still recording (use ref to avoid closure issues)
-      if (isRecordingRef.current) {
-        setTimeout(() => {
-          const currentRecorder = mediaRecorderRef.current;
-          if (isRecordingRef.current && currentRecorder && currentRecorder.state === 'inactive') {
-            console.log('🔄 Starting next 15-second segment...');
-            // Reset chunks array for new segment
-            segmentChunksRef.current = [];
-            // Restart with timeslice
-            try {
-              currentRecorder.start(1000);
-              console.log('✓ Next segment started successfully');
-            } catch (error) {
-              console.error('Error restarting MediaRecorder:', error);
+        // Automatically start next segment if still recording (use ref to avoid closure issues)
+        if (isRecordingRef.current) {
+          setTimeout(() => {
+            const currentRecorder = mediaRecorderRef.current;
+            if (isRecordingRef.current && currentRecorder && currentRecorder.state === 'inactive') {
+              console.log('🔄 Starting next 15-second segment...');
+              // Reset chunks array for new segment
+              segmentChunksRef.current = [];
+              // Restart with timeslice
+              try {
+                currentRecorder.start(1000);
+                console.log('✓ Next segment started successfully');
+              } catch (error) {
+                console.error('Error restarting MediaRecorder:', error);
+              }
+            } else {
+              console.log(`⚠ Cannot restart: isRecording=${isRecordingRef.current}, recorder=${!!currentRecorder}, state=${currentRecorder?.state}`);
             }
-          } else {
-            console.log(`⚠ Cannot restart: isRecording=${isRecordingRef.current}, recorder=${!!currentRecorder}, state=${currentRecorder?.state}`);
-          }
-        }, 300); // Slightly longer delay to ensure state is ready
-      } else {
-        console.log('⏹ Recording stopped, not restarting segment');
-      }
-    };
-
-    // Start recording with timeslice to ensure chunks are collected regularly
-    // Timeslice of 1 second ensures we get chunks every second
-    mediaRecorder.start(1000); // Request data every 1 second
-    
-    // Set up interval to stop/restart every 15 seconds for complete segments
-    intervalRef.current = setInterval(() => {
-      const recorder = mediaRecorderRef.current;
-      if (recorder && recorder.state === 'recording') {
-        // Request final data before stopping
-        recorder.requestData();
-        // Small delay to ensure final data is collected, then stop
-        setTimeout(() => {
-          if (recorder && recorder.state === 'recording') {
-            console.log(`⏹ Stopping segment after 15 seconds (collected ${segmentChunksRef.current.length} chunks)`);
-            recorder.stop(); // This triggers onstop, which sends the segment
-          }
-        }, 200);
-      }
-    }, 15000); // Create a new segment every 15 seconds
-
-    setIsRecording(true);
-    isRecordingRef.current = true; // Set ref to track recording state
-    setRecordingDuration(0);
-    setTranscription('');
-    setPartialTranscript('');
-
-    // Start duration timer
-    durationIntervalRef.current = setInterval(() => {
-      setRecordingDuration(prev => prev + 1);
-    }, 1000);
-
-    console.log('✓ Recording started with 15-second segments');
-
-  } catch (error) {
-    console.error('Error starting recording:', error);
-    alert('Failed to start recording. Please check microphone permissions.');
-  }
-};
-
+          }, 300); // Slightly longer delay to ensure state is ready
+        } else {
+          console.log('⏹ Recording stopped, not restarting segment');
+        }
+      };
+  
+      // Start recording with timeslice to ensure chunks are collected regularly
+      // Timeslice of 1 second ensures we get chunks every second
+      mediaRecorder.start(1000); // Request data every 1 second
+      
+      // Set up interval to stop/restart every 15 seconds for complete segments
+      intervalRef.current = setInterval(() => {
+        const recorder = mediaRecorderRef.current;
+        if (recorder && recorder.state === 'recording') {
+          // Request final data before stopping
+          recorder.requestData();
+          // Small delay to ensure final data is collected, then stop
+          setTimeout(() => {
+            if (recorder && recorder.state === 'recording') {
+              console.log(`⏹ Stopping segment after 15 seconds (collected ${segmentChunksRef.current.length} chunks)`);
+              recorder.stop(); // This triggers onstop, which sends the segment
+            }
+          }, 200);
+        }
+      }, 15000); // Create a new segment every 15 seconds
+  
+      setIsRecording(true);
+      isRecordingRef.current = true; // Set ref to track recording state
+      setRecordingDuration(0);
+      // Do NOT clear transcription if it already exists from DB, but maybe clear partial
+      setPartialTranscript('');
+  
+      // Start duration timer
+      durationIntervalRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+  
+      console.log('✓ Recording started with 15-second segments');
+  
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      alert('Failed to start recording. Please check microphone permissions.');
+    }
+  };
 
   // Stop recording
   const handleStopRecording = async () => {
@@ -284,13 +332,106 @@ const handleStartRecording = async () => {
       console.error('Error stopping recording:', error);
     }
   };
-  
+
+  useEffect(() => {
+    const fetchAppointment = async () => {
+      try {
+        setLoading(true);
+        const response = await apiRequest(`/appointments/${appointmentId}`);
+        if (response.success) {
+          const apiData = response.data;
+          
+          // Transform API data to expected frontend format
+          const [idPrefix, visitNumStr] = (apiData._id || '').split('-');
+          const visitNum = parseInt(visitNumStr || '0', 10);
+          const type = visitNum === 0 ? 'NEW_PATIENT' : 'CONTINUATION';
+          
+          const activities = [];
+          
+          if (apiData.discussion && apiData.discussion.trim().length > 0) {
+            activities.push({
+              id: 'rec-' + apiData._id,
+              type: ACTIVITY_TYPES.RECORDING,
+              title: 'Consultation Recording',
+              timestamp: new Date(apiData.updated_at || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+              data: {
+                duration: 'N/A', 
+                transcription: apiData.discussion
+              }
+            });
+            // Update local transcription state if loaded
+            setTranscription(apiData.discussion);
+          }
+          
+          const transformedAppointment = {
+            ...apiData,
+            id: apiData._id,
+            patientName: apiData.patient?.name || 'Unknown Patient',
+            patientAge: apiData.patient?.age || 'N/A',
+            patientGender: apiData.patient?.gender || 'N/A',
+            scheduledTime: apiData.start_time ? new Date(apiData.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A',
+            type: type,
+            appointmentNumber: visitNum + 1,
+            previousAppointments: [], // Placeholder
+            session: {
+              startedAt: apiData.start_time ? new Date(apiData.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A',
+              totalDuration: '00:00', // Placeholder
+              activities: activities,
+              requiredCompleted: {
+                recording: !!(apiData.discussion && apiData.discussion.trim().length > 0),
+                documents: false,
+                report: false
+              }
+            }
+          };
+          
+          setAppointment(transformedAppointment);
+        } else {
+          setError('Failed to fetch appointment details');
+        }
+      } catch (err) {
+        console.error("Error fetching appointment:", err);
+        setError('An error occurred while fetching appointment details');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (appointmentId) {
+      fetchAppointment();
+    }
+  }, [appointmentId]);
+
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       handleStopRecording();
     };
   }, []);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <Loader className="w-8 h-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  if (error || !appointment) {
+    return (
+      <div className="p-6 text-center">
+        <div className="text-red-500 mb-4">{error || 'Appointment not found'}</div>
+        <button onClick={() => navigate('/doctor')} className="btn-secondary">Back to Dashboard</button>
+      </div>
+    );
+  }
+
+  const session = appointment.session;
+  const activities = session?.activities || [];
+  
+  // Use local Logic or Helper.
+  const requiredComplete = session?.requiredCompleted?.recording && session?.requiredCompleted?.documents && session?.requiredCompleted?.report;
 
   const getActivityColor = (type) => {
     const colors = {
@@ -304,26 +445,35 @@ const handleStartRecording = async () => {
     return colors[type] || 'bg-gray-50 border-gray-200';
   };
 
-  const getActivityTitle = (type) => {
-    const titles = {
-      [ACTIVITY_TYPES.RECORDING]: 'Consultation Recording',
-      [ACTIVITY_TYPES.DOCUMENTS]: 'Handwritten Documents',
-      [ACTIVITY_TYPES.REPORT]: 'Clinical Report',
-      [ACTIVITY_TYPES.TESTS]: 'Test Results',
-      [ACTIVITY_TYPES.DIAGNOSIS]: 'Diagnosis & Insights',
-      [ACTIVITY_TYPES.ADDITIONAL_DOCS]: 'Additional Documents'
-    };
-    return titles[type] || 'Activity';
+  const getActivityIcon = (type) => {
+     // I will use explicit icons here as I don't want to import from data file if not needed or I can import it
+     // But previous code imported it. Let's keep it imported.
+     // Wait, the imported getActivityIcon function might return JSX.
+     // Let's assume it works as before.
+     // If not, I'll use a switch case.
+     // The error log didn't complain about getActivityIcon.
+     return type === ACTIVITY_TYPES.RECORDING ? <Mic /> : 
+            type === ACTIVITY_TYPES.DOCUMENTS ? <FileCheck /> :
+            type === ACTIVITY_TYPES.REPORT ? <FileText /> :
+            type === ACTIVITY_TYPES.TESTS ? <TestTube2 /> :
+            type === ACTIVITY_TYPES.DIAGNOSIS ? <Brain /> : <Plus />;
   };
 
   const ActivityTimeline = ({ activity }) => {
     const isExpanded = expandedActivity === activity.id;
     
+    // Use imported function or fallback
+    const icon = activity.type === ACTIVITY_TYPES.RECORDING ? <Mic /> : 
+                 activity.type === ACTIVITY_TYPES.DOCUMENTS ? <FileCheck /> :
+                 activity.type === ACTIVITY_TYPES.REPORT ? <FileText /> :
+                 activity.type === ACTIVITY_TYPES.TESTS ? <TestTube2 /> :
+                 activity.type === ACTIVITY_TYPES.DIAGNOSIS ? <Brain /> : <Plus />;
+
     return (
       <div className={`card border-2 ${getActivityColor(activity.type)}`}>
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-start space-x-3 flex-1">
-            <div className="text-3xl">{getActivityIcon(activity.type)}</div>
+            <div className="text-3xl">{icon}</div> 
             <div className="flex-1">
               <h4 className="text-lg font-bold text-gray-900">{activity.title}</h4>
               <p className="text-sm text-gray-600 flex items-center">
@@ -527,7 +677,7 @@ const handleStartRecording = async () => {
                     🔄 Appointment #{appointment.appointmentNumber} for this patient
                   </p>
                   <p className="text-xs text-purple-700 mt-1">
-                    Previous visits: {appointment.previousAppointments.length}
+                    Previous visits: {appointment.previousAppointments?.length || 0}
                   </p>
                 </div>
               )}

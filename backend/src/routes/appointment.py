@@ -78,6 +78,29 @@ async def read_appointments(
                 except:
                     # Fallback if doctor_id is not valid ObjectId
                     pass
+            
+            # Populate patient details
+            if "patient_id" in appointment and appointment["patient_id"]:
+                try:
+                    patient = await user_collection.find_one({"_id": ObjectId(appointment["patient_id"])})
+                    if patient:
+                        age = "N/A"
+                        if "date_of_birth" in patient and patient["date_of_birth"]:
+                            try:
+                                dob = patient["date_of_birth"]
+                                if isinstance(dob, datetime):
+                                    age = (datetime.now() - dob).days // 365
+                            except:
+                                pass
+                                
+                        appointment["patient"] = {
+                            "name": patient.get("full_name", "Unknown"),
+                            "gender": patient.get("gender", "N/A"),
+                            "age": age,
+                            "id": str(patient["_id"])
+                        }
+                except:
+                    pass
 
             appointments.append(appointment)
         return appointments
@@ -122,6 +145,29 @@ async def get_appointment(appointment_id: str):
                             "name": doctor.get("full_name", "Unknown"),
                             "specialization": doctor.get("specialization", "General")
                         }
+            except:
+                pass
+        
+        # Populate patient details
+        if "patient_id" in appointment and appointment["patient_id"]:
+            try:
+                patient = await user_collection.find_one({"_id": ObjectId(appointment["patient_id"])})
+                if patient:
+                    age = "N/A"
+                    if "date_of_birth" in patient and patient["date_of_birth"]:
+                        try:
+                            dob = patient["date_of_birth"]
+                            if isinstance(dob, datetime):
+                                age = (datetime.now() - dob).days // 365
+                        except:
+                            pass
+                            
+                    appointment["patient"] = {
+                        "name": patient.get("full_name", "Unknown"),
+                        "gender": patient.get("gender", "N/A"),
+                        "age": age,
+                        "id": str(patient["_id"])
+                    }
             except:
                 pass
         
