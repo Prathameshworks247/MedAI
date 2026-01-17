@@ -48,7 +48,17 @@ async def read_appointments(
         if appointment_status:
             query["status"] = appointment_status
         if appointment_date:
-            query["appointment_date"] = appointment_date
+            try:
+                # Parse date string "YYYY-MM-DD" to datetime
+                start_date = datetime.strptime(appointment_date, "%Y-%m-%d")
+                end_date = start_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+                query["appointment_date"] = {
+                    "$gte": start_date,
+                    "$lte": end_date
+                }
+            except ValueError:
+                # If parsing fails, ignore the date filter or handle accordingly
+                pass
         async for appointment in appointment_collection.find(query).limit(limit or 1000):
             # Convert ObjectId to string
             appointment["_id"] = str(appointment["_id"])
