@@ -10,7 +10,7 @@ from src.services.storage import (
     store_tests,
     store_time_series
 )
-from utils.pdf import extract_text_from_pdf
+from src.utils.pdf import extract_text_from_pdf_upload
 
 router = APIRouter()
 
@@ -21,7 +21,7 @@ async def ingest_document(
     file: UploadFile
 ):
     # 1️⃣ Extract text
-    text = extract_text_from_pdf(file)
+    text = await extract_text_from_pdf_upload(file)
 
     # 2️⃣ LLM extraction
     result = chain.invoke({"document_text": text})

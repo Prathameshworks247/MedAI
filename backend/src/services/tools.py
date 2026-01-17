@@ -252,26 +252,60 @@ async def _save_to_mongo_impl(
         
         # 1. Update appointment
         if extracted.get("appointment_updates"):
-            # Get the existing appointment to preserve system fields like doctor_id
+            # Get the existing appointment to preserve all system fields
             existing_appointment = await appointment_collection.find_one({"_id": appointment_object_id})
             
-            updates = extracted["appointment_updates"]
+            if not existing_appointment:
+                print(f"⚠️  Appointment {appointment_id} not found, skipping update")
+                return f"Appointment {appointment_id} not found"
+            
+            updates = extracted["appointment_updates"].copy()  # Work with a copy
             updates["updated_at"] = datetime.now()
             
-            # Preserve doctor_id if it exists in the appointment but not in updates
-            if existing_appointment and "doctor_id" in existing_appointment:
-                if "doctor_id" not in updates or not updates.get("doctor_id"):
-                    updates["doctor_id"] = existing_appointment["doctor_id"]
-                    print(f"📋 Preserved doctor_id: {existing_appointment['doctor_id']}")
+            # Preserve critical system fields that should never be overwritten
+            system_fields_to_preserve = [
+                "patient_id", "doctor_id", "appointment_date", 
+                "start_time", "end_time", "created_at", "_id"
+            ]
             
-            await appointment_collection.update_one(
-                {"_id": appointment_object_id},
-                {"$set": updates}
-            )
-            print(f"✓ Updated appointment: {appointment_id}")
+            for field in system_fields_to_preserve:
+                if field in existing_appointment:
+                    # Only preserve if update doesn't have a valid value or is trying to set empty
+                    if field not in updates or not updates.get(field) or updates[field] == "":
+                        updates[field] = existing_appointment[field]
+                        if field == "doctor_id":
+                            print(f"📋 Preserved {field}: {existing_appointment[field]}")
+            
+            # Only update fields that have actual values (not empty strings for important fields)
+            # Remove empty string updates for critical fields to preserve existing data
+            fields_to_check = ["chief_complaint", "discussion_summary", "status", "diagnosis"]
+            for field in fields_to_check:
+                if field in updates and updates[field] == "" and field in existing_appointment:
+                    # Don't overwrite with empty string if existing value exists
+                    if existing_appointment[field]:
+                        del updates[field]
+                        print(f"📋 Preserved existing {field} (LLM returned empty)")
+            
+            # Only update if there are actual changes
+            if updates:
+                await appointment_collection.update_one(
+                    {"_id": appointment_object_id},
+                    {"$set": updates}
+                )
+                print(f"✓ Updated appointment: {appointment_id} with {len(updates)} fields")
+            else:
+                print(f"ℹ️  No appointment updates to apply (all fields preserved)")
         
-        # 2. Store reports
+        # 2. Store reports (append, don't replace)
         if extracted.get("reports"):
+            # Ensure reports array exists in appointment
+            existing_appointment = await appointment_collection.find_one({"_id": appointment_object_id})
+            if existing_appointment and "reports" not in existing_appointment:
+                await appointment_collection.update_one(
+                    {"_id": appointment_object_id},
+                    {"$set": {"reports": []}}
+                )
+            
             for report in extracted["reports"]:
                 report_doc = {
                     "report_id": str(ObjectId()),
@@ -281,14 +315,23 @@ async def _save_to_mongo_impl(
                     "created_at": datetime.now(),
                     "updated_at": datetime.now()
                 }
+                # Use $push to append, preserving existing reports
                 await appointment_collection.update_one(
                     {"_id": appointment_object_id},
-                    {"$push": {"reports": report_doc}}
+                    {"$push": {"reports": report_doc}, "$set": {"updated_at": datetime.now()}}
                 )
-            print(f"✓ Stored {len(extracted['reports'])} reports")
+            print(f"✓ Stored {len(extracted['reports'])} reports (appended to existing)")
         
-        # 3. Store tests
+        # 3. Store tests (append, don't replace)
         if extracted.get("tests"):
+            # Ensure tests array exists in appointment
+            existing_appointment = await appointment_collection.find_one({"_id": appointment_object_id})
+            if existing_appointment and "tests" not in existing_appointment:
+                await appointment_collection.update_one(
+                    {"_id": appointment_object_id},
+                    {"$set": {"tests": []}}
+                )
+            
             for test_document in extracted["tests"]:
                 # Create test document with nested tests
                 test_doc = {
@@ -305,21 +348,54 @@ async def _save_to_mongo_impl(
                     "created_at": datetime.now(),
                     "updated_at": datetime.now()
                 }
+                # Use $push to append, preserving existing tests
                 await appointment_collection.update_one(
                     {"_id": appointment_object_id},
-                    {"$push": {"tests": test_doc}}
+                    {"$push": {"tests": test_doc}, "$set": {"updated_at": datetime.now()}}
                 )
-            print(f"✓ Stored {len(extracted['tests'])} test documents")
+            print(f"✓ Stored {len(extracted['tests'])} test documents (appended to existing)")
         
         # 4. Update patient profile
         if extracted.get("patient_profile_updates"):
-            patient_updates = extracted["patient_profile_updates"]
-            patient_updates["updated_at"] = datetime.now()
-            await user_collection.update_one(
-                {"_id": patient_object_id},
-                {"$set": patient_updates}
-            )
-            print(f"✓ Updated patient profile: {patient_id}")
+            # Get existing patient to preserve system fields
+            existing_patient = await user_collection.find_one({"_id": patient_object_id})
+            
+            if not existing_patient:
+                print(f"⚠️  Patient {patient_id} not found, skipping profile update")
+            else:
+                patient_updates = extracted["patient_profile_updates"].copy()
+                patient_updates["updated_at"] = datetime.now()
+                
+                # Preserve critical system fields
+                system_fields_to_preserve = [
+                    "_id", "email", "full_name", "phone", "gender", 
+                    "date_of_birth", "blood_group", "user_type", "hashed_password"
+                ]
+                
+                for field in system_fields_to_preserve:
+                    if field in existing_patient:
+                        if field not in patient_updates or not patient_updates.get(field):
+                            patient_updates[field] = existing_patient[field]
+                
+                # For array fields (medical_history, allergies, etc.), merge instead of replace
+                array_fields = ["medical_history", "allergies", "medications", "conditions"]
+                for field in array_fields:
+                    if field in patient_updates and isinstance(patient_updates[field], list):
+                        existing_array = existing_patient.get(field, [])
+                        if isinstance(existing_array, list):
+                            # Merge arrays, avoiding duplicates
+                            merged = list(existing_array)
+                            for item in patient_updates[field]:
+                                if item and item not in merged:
+                                    merged.append(item)
+                            patient_updates[field] = merged
+                            print(f"📋 Merged {field}: {len(existing_array)} existing + {len(patient_updates[field]) - len(existing_array)} new")
+                
+                await user_collection.update_one(
+                    {"_id": patient_object_id},
+                    {"$set": patient_updates}
+                )
+                print(f"✓ Updated patient profile: {patient_id}")
         
         # 5. Store time series observations
         if extracted.get("time_series_observations"):

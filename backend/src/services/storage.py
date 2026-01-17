@@ -31,6 +31,6 @@ async def store_tests(appointment_id: str, test: dict):
 
 async def store_time_series(patient_id: str, time_series: dict):
     await db.user_collection.update_one(
-        {"_id": patient_id},/
+        {"_id": patient_id},
         {"$addToSet": {"time_series": time_series}}
     )
