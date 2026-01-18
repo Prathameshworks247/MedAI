@@ -130,6 +130,7 @@ const DoctorDashboard = () => {
     // `backend/src/routes/appointment.py` lines 60-70 only populates doctor.
     // I should probably update the backend to populate patient as well for the doctor dashboard to be useful.
     
+    const appointmentNo = appointment._id?.split('-')[1];
     const patientName = appointment.patient_name || appointment.patient?.name || "Patient ID: " + appointment.patient_id;
     const startTime = formatTime(appointment.start_time);
 
@@ -137,8 +138,7 @@ const DoctorDashboard = () => {
       <div className={`card transition-all ${isCurrent ? 'border-2 border-green-400 bg-green-50' : ''} ${isCompleted ? 'opacity-75' : ''}`}>
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center space-x-2">
-            <Clock className="w-5 h-5 text-gray-600" />
-            <span className="font-semibold text-gray-900">{startTime}</span>
+            <span className="text-xl font-semibold">{appointmentNo === "0" ? "Baseline Visit" : "Follow Up Visit #" + appointmentNo}</span>
           </div>
           <div className="flex items-center space-x-2">
             {getStatusIcon(appointment.status)}
@@ -147,11 +147,17 @@ const DoctorDashboard = () => {
             </span>
           </div>
         </div>
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center space-x-2">
+            <Clock className="w-5 h-5 text-gray-600" />
+            <span className="font-semibold text-gray-900">{startTime}</span>
+          </div>
+        </div>
 
         <div className="mb-3">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-lg font-bold text-gray-900">{patientName}</h3>
-            {getTypeBadge(appointment.type, appointment.appointment_number)}
+            <h3 className="text-gray-900">Patient Name: {patientName}</h3>
+            {/* {getTypeBadge(appointment.type, appointment.appointment_number)} */}
           </div>
           <p className="text-sm text-gray-600 capitalize">{appointment.patient?.age || 'N/A'} years • {appointment.patient?.gender || 'N/A'}</p>
         </div>
