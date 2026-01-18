@@ -8,6 +8,7 @@ from src.middlewares.auth import check_doctor_exists
 from src.db import appointment_collection, user_collection
 from src.services.streaming_stt import StreamingTranscriber
 from src.services.whisper_service import transcribe_audio_file
+from src.services.agent import process_medical_document
 
 router = APIRouter()
 
@@ -491,6 +492,35 @@ async def live_detection(websocket: WebSocket):
             # Save final discussion to appointment
             if final_text:
                 await save_discussion_to_appointment(final_text, is_final=True)
+                
+                # Process transcript through LLM extraction pipeline
+                if appointment_object_id:
+                    try:
+                        # Get appointment to extract patient_id
+                        appointment = await appointment_collection.find_one({"_id": appointment_object_id})
+                        if appointment and appointment.get("patient_id"):
+                            patient_id = appointment["patient_id"]
+                            print(f"🔄 Processing transcript through LLM extraction pipeline...")
+                            
+                            # Process the transcript through the same pipeline as documents
+                            extraction_result = await process_medical_document(
+                                document_text=final_text,
+                                patient_id=patient_id,
+                                appointment_id=appointment_id,
+                                file_path=None  # No PDF, just text
+                            )
+                            
+                            if extraction_result.get("errors"):
+                                print(f"⚠️  LLM extraction errors: {extraction_result['errors']}")
+                            else:
+                                print(f"✅ Successfully extracted and saved clinical information from transcript")
+                        else:
+                            print(f"⚠️  Could not find patient_id in appointment, skipping LLM extraction")
+                    except Exception as e:
+                        print(f"⚠️  Error processing transcript through LLM pipeline: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        # Don't fail the WebSocket if extraction fails
 
             # Try to send final discussion, but don't fail if connection is closed
             try:
