@@ -414,7 +414,6 @@ const ActiveSession = () => {
             scheduledTime: apiData.start_time ? new Date(apiData.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A',
             type: type,
             appointmentNumber: visitNum,
-            appointmentNumber: visitNum,
             previousAppointments: previousAppointments,
             session: {
               startedAt: apiData.start_time ? new Date(apiData.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A',
