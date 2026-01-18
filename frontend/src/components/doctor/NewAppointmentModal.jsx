@@ -54,7 +54,6 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
         
         // Calculate end time (default 30 mins duration)
         const startTime = new Date(`${formData.date}T${formData.time}`);
-        const endTime = new Date(startTime.getTime() + 30 * 60000);
 
         const payload = {
             patient_id: patient.id,
@@ -63,7 +62,6 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
             status: "scheduled",
             chief_complaint: formData.chiefComplaint || (lastAppointment ? "Follow up" : "New Visit"),
             start_time: startTime.toISOString(),
-            end_time: endTime.toISOString(),
             // Required empty fields for validation
             discussion: "",
             discussion_summary: "",

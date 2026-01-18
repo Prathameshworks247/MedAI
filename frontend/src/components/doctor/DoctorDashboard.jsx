@@ -110,10 +110,10 @@ const DoctorDashboard = () => {
   };
 
   const AppointmentCard = ({ appointment, isCurrent = false }) => {
-    const status = appointment.status?.toUpperCase();
-    const isCompleted = status === 'COMPLETED';
-    const isInProgress = status === 'IN_PROGRESS';
-    const isScheduled = status === 'SCHEDULED' || status === 'NEW';
+    const status = appointment.status;
+    const isCompleted = status === 'completed';
+    const isInProgress = status === 'in_progress';
+    const isScheduled = status === 'scheduled';
 
     // Map backend fields to UI fields if needed
     // Backend: patient_id, doctor_id, appointment_date, status, chief_complaint, start_time, end_time
@@ -132,14 +132,13 @@ const DoctorDashboard = () => {
     
     const patientName = appointment.patient_name || appointment.patient?.name || "Patient ID: " + appointment.patient_id;
     const startTime = formatTime(appointment.start_time);
-    const endTime = formatTime(appointment.end_time);
 
     return (
       <div className={`card transition-all ${isCurrent ? 'border-2 border-green-400 bg-green-50' : ''} ${isCompleted ? 'opacity-75' : ''}`}>
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center space-x-2">
             <Clock className="w-5 h-5 text-gray-600" />
-            <span className="font-semibold text-gray-900">{startTime} - {endTime}</span>
+            <span className="font-semibold text-gray-900">{startTime}</span>
           </div>
           <div className="flex items-center space-x-2">
             {getStatusIcon(appointment.status)}
@@ -154,7 +153,7 @@ const DoctorDashboard = () => {
             <h3 className="text-lg font-bold text-gray-900">{patientName}</h3>
             {getTypeBadge(appointment.type, appointment.appointment_number)}
           </div>
-          <p className="text-sm text-gray-600">{appointment.patient_age || 'N/A'} years • {appointment.patient_gender || 'N/A'}</p>
+          <p className="text-sm text-gray-600 capitalize">{appointment.patient?.age || 'N/A'} years • {appointment.patient?.gender || 'N/A'}</p>
         </div>
 
         <div className="bg-gray-50 rounded-lg p-3 mb-3">
