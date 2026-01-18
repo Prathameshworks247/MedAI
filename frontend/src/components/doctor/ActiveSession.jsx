@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Square, Clock, CheckCircle, Upload, FileText, Brain, Download, Eye, Plus, Mic, FileCheck, TestTube2, Sparkles, MessageSquare, Loader } from 'lucide-react';
+import { ArrowLeft, Play, Square, Clock, CheckCircle, Upload, FileText, Brain, Download, Eye, Plus, Mic, FileCheck, TestTube2, Sparkles, MessageSquare, Loader, Calendar, Stethoscope, Activity } from 'lucide-react';
 import { ACTIVITY_TYPES, isRequiredActivitiesComplete, getActivityIcon } from '../../data/appointmentData';
 import { apiRequest } from '../../utils/api';
 
@@ -15,6 +15,7 @@ const ActiveSession = () => {
   const [error, setError] = useState(null);
 
   const [expandedActivity, setExpandedActivity] = useState(null);
+  const [expandedHistoryId, setExpandedHistoryId] = useState(null);
   
   // Audio recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -344,7 +345,7 @@ const ActiveSession = () => {
           // Transform API data to expected frontend format
           const [idPrefix, visitNumStr] = (apiData._id || '').split('-');
           const visitNum = parseInt(visitNumStr || '0', 10);
-          const type = visitNum === 0 ? 'NEW_PATIENT' : 'CONTINUATION';
+          const type = visitNum === 0 ? 'baseline' : 'followup';
           
           const activities = [];
           
@@ -362,6 +363,47 @@ const ActiveSession = () => {
             // Update local transcription state if loaded
             setTranscription(apiData.discussion);
           }
+
+          // Fetch previous appointments
+          let previousAppointments = [];
+          if (visitNum > 0) {
+            try {
+              const prevIds = Array.from({ length: visitNum }, (_, i) => `${idPrefix}-${i}`);
+              // Fetch all in parallel
+              const prevResponses = await Promise.all(prevIds.map(id => apiRequest(`/appointments/${id}`)));
+              
+              previousAppointments = prevResponses
+                .filter(res => res.success && res.data)
+                .map(res => {
+                    const apt = res.data;
+                    const dateObj = new Date(apt.start_time || Date.now());
+                    return {
+                        id: apt._id,
+                        scheduledDate: apt.appointment_date ? apt.appointment_date.split('T')[0] : '',
+                        scheduledTime: dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        chiefComplaint: apt.chief_complaint,
+                        status: apt.status || 'completed',
+                        doctor: apt.doctor || {},
+                        patient: apt.patient || {},
+                        session: {
+                            discussion: apt.discussion,
+                            reports: apt.reports,
+                            tests: apt.tests,
+                            generated_diagnosis: apt.generated_diagnosis,
+                            doctor_diagnosis: apt.doctor_diagnosis
+                        },            
+                    };
+                })
+                .sort((a, b) => {
+                     const numA = parseInt(a.id.split('-')[1]);
+                     const numB = parseInt(b.id.split('-')[1]);
+                     return numB - numA; // Descending order
+                });
+            } catch (err) {
+              console.error("Error fetching previous appointments:", err);
+              // Do not fail the main load if history fails
+            }
+          }
           
           const transformedAppointment = {
             ...apiData,
@@ -371,8 +413,9 @@ const ActiveSession = () => {
             patientGender: apiData.patient?.gender || 'N/A',
             scheduledTime: apiData.start_time ? new Date(apiData.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A',
             type: type,
-            appointmentNumber: visitNum + 1,
-            previousAppointments: [], // Placeholder
+            appointmentNumber: visitNum,
+            appointmentNumber: visitNum,
+            previousAppointments: previousAppointments,
             session: {
               startedAt: apiData.start_time ? new Date(apiData.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A',
               totalDuration: '00:00', // Placeholder
@@ -649,6 +692,19 @@ const ActiveSession = () => {
     );
   };
 
+  const appointmentNo = appointment.id.split("-")[1];
+
+  const getStatusBadge = (status) => {
+    const badges = {
+      'scheduled': 'bg-blue-100 text-blue-700',
+      'in_progress': 'bg-green-100 text-green-700',
+      'paused': 'bg-yellow-100 text-yellow-700',
+      'completed': 'bg-gray-100 text-gray-700',
+      'cancelled': 'bg-red-100 text-red-700'
+    };
+    return badges[status] || 'bg-gray-100 text-gray-700';
+  };
+
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
@@ -660,6 +716,143 @@ const ActiveSession = () => {
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Dashboard
         </button>
+
+        {/* Previous Visits */}
+      {appointment.previousAppointments && appointment.previousAppointments.length > 0 && (
+        <div className="mb-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+                <Clock className="w-5 h-5 mr-2 text-gray-600" />
+                Previous Visits
+            </h3>
+            <div className="space-y-4">
+                {appointment.previousAppointments.map((prevApt) => {
+                     const isExpanded = expandedHistoryId === prevApt.id;
+                     const session = prevApt.session;
+                     const aptNo = prevApt.id.split('-')[1];
+
+                     return (
+                        <div key={prevApt.id} className={`card ${isExpanded ? 'ring-2 ring-primary-500' : ''}`}>
+                             <div className="flex items-start justify-between mb-3">
+                                 <div className="flex-1">
+                                      <div className="flex items-center space-x-2 mb-1">
+                                         <Calendar className="w-5 h-5 text-gray-600" />
+                                          <h4 className="text-lg font-bold text-gray-900">
+                                            {aptNo == 0 ? "Baseline Visit" : `Follow Up Visit #${aptNo}`}
+                                          </h4>   
+                                      </div>
+                                      <p className="text-base font-semibold mb-1">Doctor: {prevApt.doctor?.name || 'Unknown'}</p>
+                                      <p className="text-sm text-gray-700 mb-1">Chief Complaint: {prevApt.chiefComplaint}</p>
+                                      <p className="text-sm text-gray-600 mb-1 italic">
+                                        "{prevApt.scheduledDate} at {prevApt.scheduledTime}" 
+                                      </p>
+                                 </div>
+                                 <span className={`text-xs px-3 py-1 rounded-full font-semibold ${getStatusBadge(prevApt.status)}`}>
+                                   {(prevApt.status || 'completed').replace('_', ' ')}
+                                 </span>
+                             </div>
+                             
+                              <div className="flex space-x-2">
+                                <button 
+                                  onClick={() => setExpandedHistoryId(isExpanded ? null : prevApt.id)}
+                                  className="flex-1 btn-primary flex items-center justify-center"
+                                >
+                                  <Eye className="w-4 h-4 mr-2" />
+                                  {isExpanded ? 'Hide Details' : 'View Details'}
+                                </button>
+                                <button className="btn-secondary flex items-center">
+                                  <Download className="w-4 h-4 mr-2" />
+                                  Export
+                                </button>
+                              </div>
+                              
+                              {/* Details */}
+                              {isExpanded && session && (
+                                <div className="mt-4 pt-4 border-t border-gray-200">
+                                  <h5 className="text-lg font-bold text-gray-900 mb-4">Session Details</h5>
+                                  
+                                  {/* Discussion */}
+                                  {session.discussion && (
+                                    <div className="mb-6">
+                                       <h6 className="flex items-center text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide">
+                                          <span className="w-5 h-5 mr-2 flex items-center justify-center bg-blue-100 text-blue-600 rounded-full">🎤</span>
+                                          Discussion
+                                       </h6>
+                                       <div className="bg-gray-50 rounded-lg p-4 border border-gray-100 max-h-60 overflow-y-auto">
+                                          <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{session.discussion}</p>
+                                       </div>
+                                    </div>
+                                  )}
+                
+                                  {/* Reports */}
+                                  {session.reports && session.reports.length > 0 && (
+                                    <div className="mb-6">
+                                       <h6 className="flex items-center text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide">
+                                          <span className="w-5 h-5 mr-2 flex items-center justify-center bg-green-100 text-green-600 rounded-full">📋</span>
+                                          Reports
+                                       </h6>
+                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                         {session.reports.map((report, idx) => (
+                                            <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 hover:border-green-300 rounded-lg p-3 shadow-sm transition-all group">
+                                               <div className="flex items-center space-x-3 overflow-hidden">
+                                                  <FileText className="w-5 h-5 text-gray-400 group-hover:text-green-500" />
+                                                  <span className="text-sm font-medium text-gray-700 truncate" title={report.file_name}>{report.file_name}</span>
+                                               </div>
+                                               <a 
+                                                  href={report.uri} 
+                                                  target="_blank" 
+                                                  rel="noopener noreferrer" 
+                                                  className="ml-2 p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                                                  title="Open Report"
+                                               >
+                                                  <Eye className="w-4 h-4" />
+                                               </a>
+                                            </div>
+                                         ))}
+                                       </div>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Tests */}
+                                  {session.tests && session.tests.length > 0 && (
+                                    <div className="mb-6">
+                                       <h6 className="flex items-center text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide">
+                                          <span className="w-5 h-5 mr-2 flex items-center justify-center bg-purple-100 text-purple-600 rounded-full">🧪</span>
+                                          Tests
+                                       </h6>
+                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                         {session.tests.map((test, idx) => (
+                                            <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 hover:border-purple-300 rounded-lg p-3 shadow-sm transition-all group">
+                                               <div className="flex items-center space-x-3 overflow-hidden">
+                                                  <FileText className="w-5 h-5 text-gray-400 group-hover:text-purple-500" />
+                                                  <span className="text-sm font-medium text-gray-700 truncate" title={test.doc_name}>{test.doc_name}</span>
+                                               </div>
+                                               <a 
+                                                  href={test.uri} 
+                                                  target="_blank" 
+                                                  rel="noopener noreferrer" 
+                                                  className="ml-2 p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                                                  title="Open Test Document"
+                                               >
+                                                  <Eye className="w-4 h-4" />
+                                               </a>
+                                            </div>
+                                         ))}
+                                       </div>
+                                    </div>
+                                  )}
+                
+                                  {/* Fallback if no details */}
+                                  {!session.discussion && (!session.reports || session.reports.length === 0) && (!session.tests || session.tests.length === 0) && (
+                                      <p className="text-sm text-gray-500 italic text-center py-4">No detailed session records available.</p>
+                                  )}
+                                </div>
+                              )}
+                        </div>
+                     );
+                })}
+            </div>
+        </div>
+      )}
         
         <div className="card bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-300">
           <div className="flex items-start justify-between">
@@ -671,21 +864,18 @@ const ActiveSession = () => {
               <h3 className="text-xl font-semibold text-gray-800 mb-1">{appointment.patientName}</h3>
               <p className="text-sm text-gray-600">{appointment.patientAge} years • {appointment.patientGender} • {appointment.scheduledTime}</p>
               
-              {appointment.type === 'CONTINUATION' && (
+              {appointment.type === 'followup' && (
                 <div className="mt-3 p-3 bg-purple-100 border border-purple-200 rounded-lg">
                   <p className="text-sm font-semibold text-purple-900">
-                    🔄 Appointment #{appointment.appointmentNumber} for this patient
-                  </p>
-                  <p className="text-xs text-purple-700 mt-1">
-                    Previous visits: {appointment.previousAppointments?.length || 0}
+                    🔄 Followup Visit #{appointment.appointmentNumber}
                   </p>
                 </div>
               )}
               
-              {appointment.type === 'NEW_PATIENT' && (
+              {appointment.type === 'baseline' && (
                 <div className="mt-3 p-3 bg-blue-100 border border-blue-200 rounded-lg">
                   <p className="text-sm font-semibold text-blue-900">
-                    🆕 NEW PATIENT - First consultation
+                    🆕 Baseline Visit
                   </p>
                 </div>
               )}
@@ -934,7 +1124,7 @@ const ActiveSession = () => {
             </button>
           </div>
         </div>
-      )}
+      )}      
 
       {/* Session Controls */}
       <div className="card mt-6 bg-gray-50">

@@ -57,10 +57,10 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
 
         const payload = {
             patient_id: patient.id,
-            doctor_id: formData.doctorId,
+            doctor_id: activeTab === 'continue' ? lastAppointment.doctor.id : formData.doctorId,
             appointment_date: new Date(formData.date).toISOString(),
             status: "scheduled",
-            chief_complaint: formData.chiefComplaint || (lastAppointment ? "Follow up" : "New Visit"),
+            chief_complaint: activeTab === 'continue' ? lastAppointment.chiefComplaint : formData.chiefComplaint,
             start_time: startTime.toISOString(),
             // Required empty fields for validation
             discussion: "",
@@ -156,7 +156,7 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
                                 {lastAppointment ? (
                                     <div className="space-y-2 text-sm text-gray-600">
                                         <p><span className="font-medium">Date:</span> {lastAppointment.scheduledDate}</p>
-                                        <p><span className="font-medium">Type:</span> {lastAppointment.type === 'NEW_PATIENT' ? 'Initial Consultation' : 'Follow-up'}</p>
+                                        <p><span className="font-medium">Type:</span> {lastAppointment.id?.split("-")[1] === '0' ? 'Initial Consultation' : 'Follow-up'}</p>
                                         <p><span className="font-medium">Chief Complaint:</span> {lastAppointment.chiefComplaint}</p>
                                         {lastAppointment.session?.diagnosis?.diagnosis && (
                                             <p><span className="font-medium">Diagnosis:</span> {lastAppointment.session.diagnosis.diagnosis}</p>
