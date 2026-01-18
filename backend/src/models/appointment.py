@@ -26,16 +26,17 @@ class TestModel(BaseModel):
 class AppointmentModel(BaseModel):
     patient_id: str = Field(...)
     doctor_id: str = Field(...)
-    appointment_date: datetime = Field(...)
     status: Literal["scheduled", "in_progress", "paused", "completed", "cancelled"] = Field(...)
     chief_complaint: str = Field(...)
+    appointment_date: datetime = Field(...)
     start_time: datetime = Field(...)
-    end_time: datetime = Field(...)
+    end_time: datetime | None = Field(None)
     discussion: str = Field(...)
     discussion_summary: str = Field(...)
     reports: List[ReportModel] = Field(...)
     tests: List[TestModel] = Field(...)
-    diagnosis: dict = Field(...)
+    generated_diagnosis: dict | None = Field(None)
+    doctor_diagnosis: dict | None = Field(None)
     created_at: datetime = Field(default=datetime.now())
     updated_at: datetime = Field(default=datetime.now())
 
@@ -51,4 +52,5 @@ class UpdateAppointmentModel(BaseModel):
     discussion_summary: str | None = None
     reports: List[ReportModel] | None = None
     tests: List[TestModel] | None = None
-    diagnosis: dict | None = None
+    generated_diagnosis: dict | None = None
+    doctor_diagnosis: dict | None = None

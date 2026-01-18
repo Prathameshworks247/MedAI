@@ -1,6 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, WebSocket, WebSocketDisconnect, Query, HTTPException, status, Depends
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from src.models.appointment import AppointmentModel, UpdateAppointmentModel
@@ -95,10 +95,10 @@ async def read_appointments(
                                 pass
                                 
                         appointment["patient"] = {
+                            "id": str(patient["_id"]),
                             "name": patient.get("full_name", "Unknown"),
                             "gender": patient.get("gender", "N/A"),
-                            "age": age,
-                            "id": str(patient["_id"])
+                            "age": age
                         }
                 except:
                     pass
@@ -162,12 +162,11 @@ async def get_appointment(appointment_id: str):
                                 age = (datetime.now() - dob).days // 365
                         except:
                             pass
-                            
                     appointment["patient"] = {
+                        "id": str(patient["_id"]),
                         "name": patient.get("full_name", "Unknown"),
                         "gender": patient.get("gender", "N/A"),
-                        "age": age,
-                        "id": str(patient["_id"])
+                        "age": age         
                     }
             except:
                 pass
@@ -203,12 +202,33 @@ async def create_appointment(
     try:
         # Convert Pydantic model to dict
         appointment_dict = appointment.model_dump()
+
+        # Define IST timezone
+        ist_offset = timedelta(hours=5, minutes=30)
+        ist_tz = timezone(ist_offset)
         
-        # Set timestamps if not provided
+        def convert_to_ist(dt_val):
+            if isinstance(dt_val, datetime):
+                if dt_val.tzinfo is None:
+                    dt_val = dt_val.replace(tzinfo=timezone.utc)
+                return dt_val.astimezone(ist_tz).replace(tzinfo=None)
+            return dt_val
+
+        # Convert times to IST
+        for key in ["start_time", "end_time", "appointment_date"]:
+            if key in appointment_dict and appointment_dict[key]:
+                appointment_dict[key] = convert_to_ist(appointment_dict[key])
+        
+        # Set timestamps if not provided or convert existing
         if "created_at" not in appointment_dict or not appointment_dict["created_at"]:
-            appointment_dict["created_at"] = datetime.now()
+            appointment_dict["created_at"] = datetime.now(ist_tz).replace(tzinfo=None)
+        else:
+            appointment_dict["created_at"] = convert_to_ist(appointment_dict["created_at"])
+
         if "updated_at" not in appointment_dict or not appointment_dict["updated_at"]:
-            appointment_dict["updated_at"] = datetime.now()
+            appointment_dict["updated_at"] = datetime.now(ist_tz).replace(tzinfo=None)
+        else:
+            appointment_dict["updated_at"] = convert_to_ist(appointment_dict["updated_at"])
         
         # Initialize empty discussion if not provided
         if "discussion" not in appointment_dict:
@@ -276,9 +296,25 @@ async def update_appointment(appointment_id: str, appointment_update: UpdateAppo
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No fields provided for update"
             )
+
+        # Define IST timezone
+        ist_offset = timedelta(hours=5, minutes=30)
+        ist_tz = timezone(ist_offset)
+        
+        def convert_to_ist(dt_val):
+            if isinstance(dt_val, datetime):
+                if dt_val.tzinfo is None:
+                    dt_val = dt_val.replace(tzinfo=timezone.utc)
+                return dt_val.astimezone(ist_tz).replace(tzinfo=None)
+            return dt_val
+
+        # Convert times to IST
+        for key in ["start_time", "end_time", "appointment_date"]:
+            if key in update_data and update_data[key]:
+                update_data[key] = convert_to_ist(update_data[key])
             
-        # Add updated_at timestamp
-        update_data["updated_at"] = datetime.now()
+        # Add updated_at timestamp in IST
+        update_data["updated_at"] = datetime.now(ist_tz).replace(tzinfo=None)
         
         # Try ObjectId first
         try:

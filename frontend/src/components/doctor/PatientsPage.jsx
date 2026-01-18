@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { Search, User, Calendar, Download, Eye, Play, Upload, CheckCircle, Clock, Stethoscope, Activity } from 'lucide-react';
+import { Search, User, Calendar, Download, Eye, Play, Upload, Clock, Stethoscope, Activity, FileText } from 'lucide-react';
 import { getPatientById } from '../../data/appointmentData';
 import { apiRequest } from '../../utils/api';
 import NewAppointmentModal from './NewAppointmentModal';
 
 const PatientsPage = () => {
 const { user } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [patientsList, setPatientsList] = useState([]);
@@ -56,46 +56,38 @@ const { user } = useAuth();
             chiefComplaint: apt.chief_complaint,
             status: apt.status || 'scheduled',
             doctor: apt.doctor,
+            patient: apt.patient,
             session: {
-                activities: []
-            },
-            discussion: apt.discussion // Keep raw discussion for processing
+                discussion: apt.discussion,
+                reports: apt.reports,
+                tests: apt.tests,
+                generated_diagnosis: apt.generated_diagnosis,
+                doctor_diagnosis: apt.doctor_diagnosis
+            },            
         };
-      };
-
-      const processActivities = (apt) => {
-        if (apt.discussion) {
-            apt.session.activities.push({
-                type: 'recording',
-                title: 'Session Recording',
-                timestamp: 'During Visit',
-                data: { transcription: apt.discussion }
-            });
-        }
-        return apt;
       };
 
       // Process In Progress
       if (inProgressRes.success) {
-          const inProgressMapped = inProgressRes.data.map(apt => processActivities(mapAppointment(apt)));
+          const inProgressMapped = inProgressRes.data.map(apt => mapAppointment(apt));
           allAppointments = [...allAppointments, ...inProgressMapped];
       }
 
       // Process Paused
       if (pausedRes.success) {
-          const pausedMapped = pausedRes.data.map(apt => processActivities(mapAppointment(apt)));
+          const pausedMapped = pausedRes.data.map(apt => mapAppointment(apt));
           allAppointments = [...allAppointments, ...pausedMapped];
       }
 
       // Process Scheduled
       if (scheduledRes.success) {
-          const scheduledMapped = scheduledRes.data.map(apt => processActivities(mapAppointment(apt)));
+          const scheduledMapped = scheduledRes.data.map(apt => mapAppointment(apt));
           allAppointments = [...allAppointments, ...scheduledMapped];
       }
 
       // Process Completed
       if (completedRes.success) {
-          const completedMapped = completedRes.data.map(apt => processActivities(mapAppointment(apt)));
+          const completedMapped = completedRes.data.map(apt => mapAppointment(apt));
           allAppointments = [...allAppointments, ...completedMapped];
       }
 
@@ -160,19 +152,53 @@ const { user } = useAuth();
   useEffect(() => {
     const patientId = searchParams.get('patientId');
     if (patientId) {
-        // Try to find in fetched list first
-        const patientFromList = patientsList.find(p => p.id === patientId);
-        if (patientFromList) {
-            setSelectedPatient(patientFromList);
-            setSearchQuery(patientFromList.name);
-        } else {
-            // Fallback to dummy data if not found (e.g. initial load or dummy ID)
-            const patient = getPatientById(patientId);
-            if (patient) {
-                setSelectedPatient(patient);
-                setSearchQuery(patient.name);
+        const loadPatient = async () => {
+            // Avoid re-fetching if already selected
+            if (selectedPatient?.id === patientId && patientAppointments.length > 0) return;
+
+            // 1. Try to find in fetched list first
+            const patientFromList = patientsList.find(p => p.id === patientId);
+            if (patientFromList) {
+                setSelectedPatient(patientFromList);
+                setSearchQuery(patientFromList.name);
+                fetchAppointments(patientId);
+                return;
             }
-        }
+
+            // 2. If not in list, fetch from API
+            try {
+                const response = await apiRequest(`/patients/${patientId}`);
+                if (response.success && response.data) {
+                    const p = response.data;
+                    const mappedPatient = {
+                        id: p._id,
+                        name: p.full_name,
+                        age: calculateAge(p.date_of_birth),
+                        gender: p.gender || 'Unknown', 
+                        bloodGroup: p.blood_group,
+                        phone: p.phone,
+                        registeredDate: getRegistrationDateFromId(p._id),
+                        totalAppointments: 0, 
+                        lastVisit: null
+                    };
+                    setSelectedPatient(mappedPatient);
+                    setSearchQuery(mappedPatient.name);
+                    fetchAppointments(patientId);
+                } else {
+                     // 3. Fallback to dummy data
+                     const patient = getPatientById(patientId);
+                    if (patient) {
+                        setSelectedPatient(patient);
+                        setSearchQuery(patient.name);
+                        // Also try to fetch appointments for dummy patient if needed, though likely wont work with real backend
+                        fetchAppointments(patientId);
+                    }
+                }
+            } catch (e) {
+                console.error("Error loading patient from URL", e);
+            }
+        };
+        loadPatient();
     }
   }, [searchParams, patientsList]);
 
@@ -211,11 +237,11 @@ const { user } = useAuth();
     return badges[status] || 'bg-gray-100 text-gray-700';
   };
 
-  const getContentIcon = (status) => {
-    if (status === 'completed') return <CheckCircle className="w-4 h-4 text-green-600" />;
-    if (status === 'in_progress') return <Clock className="w-4 h-4 text-orange-600 animate-pulse" />;
-    return <span className="w-4 h-4 rounded-full bg-gray-300"></span>;
-  };
+//   const getContentIcon = (status) => {
+//     if (status === 'completed') return <CheckCircle className="w-4 h-4 text-green-600" />;
+//     if (status === 'in_progress') return <Clock className="w-4 h-4 text-orange-600 animate-pulse" />;
+//     return <span className="w-4 h-4 rounded-full bg-gray-300"></span>;
+//   };
 
   const AppointmentTimeline = ({ appointments }) => {
     return (
@@ -246,27 +272,6 @@ const { user } = useAuth();
                   {appointment.status.replace('_', ' ')}
                 </span>
               </div>
-
-              {/* Session Activities Summary */}
-              {session && session.activities && session.activities.length > 0 && (
-                <div className="bg-gray-50 rounded-lg p-4 mb-3">
-                  <h5 className="text-sm font-semibold text-gray-900 mb-3">Session Activities ({session.activities.length}):</h5>
-                  <div className="space-y-2">
-                    {session.activities.map((activity, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-lg">{activity.type === 'recording' ? '🎤' : activity.type === 'documents' ? '📄' : activity.type === 'report' ? '📋' : activity.type === 'tests' ? '🧪' : activity.type === 'diagnosis' ? '🩺' : '📎'}</span>
-                          <div>
-                            <p className="text-xs font-semibold text-gray-900">{activity.title}</p>
-                            <p className="text-xs text-gray-600">{activity.timestamp}</p>
-                          </div>
-                        </div>
-                        <CheckCircle className="w-4 h-4 text-green-600" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Action Buttons */}
               <div className="flex space-x-2">
@@ -307,76 +312,86 @@ const { user } = useAuth();
                 )}
               </div>
 
-              {/* Expanded Details - Activity Timeline */}
-              {isExpanded && appointment.status === 'completed' && session && session.activities && (
+              {/* Expanded Details */}
+              {isExpanded && appointment.status === 'completed' && session && (
                 <div className="mt-4 pt-4 border-t border-gray-200">
-                  <h6 className="font-semibold text-gray-900 mb-3">Complete Activity Timeline:</h6>
-                  <div className="space-y-3">
-                    {session.activities.map((activity, idx) => (
-                      <div key={idx} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                        <div className="flex items-start space-x-3 mb-2">
-                          <span className="text-2xl">{activity.type === 'recording' ? '🎤' : activity.type === 'documents' ? '📄' : activity.type === 'report' ? '📋' : activity.type === 'tests' ? '🧪' : activity.type === 'diagnosis' ? '🩺' : '📎'}</span>
-                          <div className="flex-1">
-                            <h6 className="font-semibold text-gray-900">{activity.title}</h6>
-                            <p className="text-xs text-gray-600">{activity.timestamp}</p>
-                          </div>
-                        </div>
+                  <h5 className="text-lg font-bold text-gray-900 mb-4">Session Details</h5>
+                  
+                  {/* Discussion */}
+                  {session.discussion && (
+                    <div className="mb-6">
+                       <h6 className="flex items-center text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide">
+                          <span className="w-5 h-5 mr-2 flex items-center justify-center bg-blue-100 text-blue-600 rounded-full">🎤</span>
+                          Discussion
+                       </h6>
+                       <div className="bg-gray-50 rounded-lg p-4 border border-gray-100 max-h-60 overflow-y-auto">
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{session.discussion}</p>
+                       </div>
+                    </div>
+                  )}
 
-                        {/* Activity Content */}
-                        {activity.type === 'recording' && activity.data.transcription && (
-                          <details className="text-sm mt-2">
-                            <summary className="cursor-pointer text-blue-700 font-semibold">View Transcription</summary>
-                            <div className="mt-2 p-3 bg-white rounded border border-gray-200">
-                              <pre className="whitespace-pre-wrap text-xs text-gray-700 max-h-48 overflow-y-auto">
-                                {activity.data.transcription}
-                              </pre>
+                  {/* Reports */}
+                  {session.reports && session.reports.length > 0 && (
+                    <div className="mb-6">
+                       <h6 className="flex items-center text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide">
+                          <span className="w-5 h-5 mr-2 flex items-center justify-center bg-green-100 text-green-600 rounded-full">📋</span>
+                          Reports
+                       </h6>
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                         {session.reports.map((report, idx) => (
+                            <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 hover:border-green-300 rounded-lg p-3 shadow-sm transition-all group">
+                               <div className="flex items-center space-x-3 overflow-hidden">
+                                  <FileText className="w-5 h-5 text-gray-400 group-hover:text-green-500" />
+                                  <span className="text-sm font-medium text-gray-700 truncate" title={report.file_name}>{report.file_name}</span>
+                               </div>
+                               <a 
+                                  href={report.uri} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="ml-2 p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                                  title="Open Report"
+                               >
+                                  <Eye className="w-4 h-4" />
+                               </a>
                             </div>
-                          </details>
-                        )}
-
-                        {activity.type === 'report' && activity.data.content && (
-                          <details className="text-sm mt-2">
-                            <summary className="cursor-pointer text-green-700 font-semibold">View Report</summary>
-                            <div className="mt-2 p-3 bg-white rounded border border-gray-200">
-                              <pre className="whitespace-pre-wrap text-xs text-gray-700 max-h-48 overflow-y-auto">
-                                {activity.data.content}
-                              </pre>
+                         ))}
+                       </div>
+                    </div>
+                  )}
+                  
+                  {/* Tests */}
+                  {session.tests && session.tests.length > 0 && (
+                    <div className="mb-6">
+                       <h6 className="flex items-center text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide">
+                          <span className="w-5 h-5 mr-2 flex items-center justify-center bg-purple-100 text-purple-600 rounded-full">🧪</span>
+                          Tests
+                       </h6>
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                         {session.tests.map((test, idx) => (
+                            <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 hover:border-purple-300 rounded-lg p-3 shadow-sm transition-all group">
+                               <div className="flex items-center space-x-3 overflow-hidden">
+                                  <FileText className="w-5 h-5 text-gray-400 group-hover:text-purple-500" />
+                                  <span className="text-sm font-medium text-gray-700 truncate" title={test.doc_name}>{test.doc_name}</span>
+                               </div>
+                               <a 
+                                  href={test.uri} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="ml-2 p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                                  title="Open Test Document"
+                               >
+                                  <Eye className="w-4 h-4" />
+                               </a>
                             </div>
-                          </details>
-                        )}
+                         ))}
+                       </div>
+                    </div>
+                  )}
 
-                        {activity.type === 'tests' && activity.data.extractedValues && (
-                          <div className="mt-2 grid grid-cols-4 gap-2">
-                            {Object.entries(activity.data.extractedValues).map(([key, value]) => (
-                              <div key={key} className="bg-white rounded p-2 border border-gray-200">
-                                <p className="text-xs text-gray-600">{key}</p>
-                                <p className="text-sm font-bold text-gray-900">{value}</p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {activity.type === 'diagnosis' && activity.data.diagnosis && (
-                          <div className="mt-2 space-y-2">
-                            <div className="bg-white rounded p-3 border border-gray-200">
-                              <p className="text-sm font-semibold text-gray-900">{activity.data.diagnosis}</p>
-                              <p className="text-xs text-gray-600 mt-1">Risk Level: {activity.data.riskLevel}</p>
-                            </div>
-                            {activity.data.findings && activity.data.findings.length > 0 && (
-                              <div className="bg-white rounded p-3 border border-gray-200">
-                                <p className="text-xs font-semibold text-gray-900 mb-1">Key Findings:</p>
-                                <ul className="text-xs text-gray-700 space-y-1">
-                                  {activity.data.findings.map((finding, i) => (
-                                    <li key={i}>• {finding}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                  {/* Fallback if no details */}
+                  {!session.discussion && (!session.reports || session.reports.length === 0) && (!session.tests || session.tests.length === 0) && (
+                      <p className="text-sm text-gray-500 italic text-center py-4">No detailed session records available.</p>
+                  )}
                 </div>
               )}
             </div>
@@ -402,7 +417,10 @@ const { user } = useAuth();
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
-              if (!e.target.value) setSelectedPatient(null);
+              if (!e.target.value) {
+                setSelectedPatient(null);
+                setSearchParams({});
+              }
             }}
             placeholder="Search patient by name or ID..."
             className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-lg"
