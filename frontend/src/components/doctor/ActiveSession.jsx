@@ -24,6 +24,17 @@ const ActiveSession = () => {
   const [partialTranscript, setPartialTranscript] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   
+  // Workflow state: transcript -> documents -> chat
+  const [transcriptRecorded, setTranscriptRecorded] = useState(false);
+  const [documentsUploaded, setDocumentsUploaded] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  
+  // Chat state
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  
   // Refs for audio recording
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -75,6 +86,8 @@ const ActiveSession = () => {
             setTranscription(prev => prev + (prev && !prev.endsWith(' ') ? ' ' : '') + data.text);
             setPartialTranscript('');
             console.log('✓ Final transcript received and appended');
+            // Mark transcript as recorded when final transcript is received
+            setTranscriptRecorded(true);
             
             // Also update the appointment state to reflect the new transcription in activities
              setAppointment(prev => {
@@ -328,9 +341,153 @@ const ActiveSession = () => {
       }, 1000);
   
       console.log('✓ Recording stopped');
-  
+      // Mark transcript as recorded when recording stops (transcript will be saved to DB)
+      setTranscriptRecorded(true);
+
     } catch (error) {
       console.error('Error stopping recording:', error);
+    }
+  };
+
+  // Handle document upload
+  const handleDocumentUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    setUploading(true);
+    const patientId = appointment?.patientId || appointment?.patient?.id || appointment?.patient_id;
+
+    if (!patientId) {
+      alert('Patient ID not found');
+      setUploading(false);
+      return;
+    }
+
+    try {
+      const uploadPromises = files.map(async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        // For file uploads, we need to manually construct the request
+        // because apiRequest sets Content-Type: application/json by default
+        const token = localStorage.getItem('access_token');
+        const url = `${API_BASE_URL}/ingest/document/${appointmentId}?patient_id=${patientId}`;
+        
+        const headers = {};
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+        // Don't set Content-Type - let browser set it with boundary for FormData
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          body: formData,
+          headers: headers
+        });
+        
+        const contentType = response.headers.get('content-type');
+        let data;
+        if (contentType && contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          const text = await response.text();
+          data = { detail: text || `HTTP error! status: ${response.status}` };
+        }
+        
+        if (!response.ok) {
+          throw new Error(data.detail || `HTTP error! status: ${response.status}`);
+        }
+        
+        const apiResponse = { success: true, data };
+
+        if (apiResponse.success) {
+          return { name: file.name, success: true };
+        } else {
+          throw new Error(apiResponse.error || 'Upload failed');
+        }
+      });
+
+      const results = await Promise.all(uploadPromises);
+      setUploadedFiles(prev => [...prev, ...results]);
+      setDocumentsUploaded(true);
+      
+      // Refresh appointment data to get updated reports/tests
+      const refreshResponse = await apiRequest(`/appointments/${appointmentId}`);
+      if (refreshResponse.success) {
+        setAppointment(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            session: {
+              ...prev.session,
+              reports: refreshResponse.data.reports || [],
+              tests: refreshResponse.data.tests || []
+            }
+          };
+        });
+      }
+      
+      alert(`Successfully uploaded ${results.length} file(s)`);
+    } catch (error) {
+      console.error('Error uploading documents:', error);
+      alert(`Error uploading documents: ${error.message}`);
+    } finally {
+      setUploading(false);
+      // Reset file input
+      e.target.value = '';
+    }
+  };
+
+  // Handle chat submission
+  const handleChatSubmit = async (e) => {
+    e.preventDefault();
+    if (!chatInput.trim() || chatLoading) return;
+
+    const question = chatInput.trim();
+    const patientId = appointment?.patientId || appointment?.patient?.id || appointment?.patient_id;
+
+    if (!patientId) {
+      alert('Patient ID not found');
+      return;
+    }
+
+    // Add user message to chat
+    const userMessage = { role: 'user', content: question };
+    setChatMessages(prev => [...prev, userMessage]);
+    setChatInput('');
+    setChatLoading(true);
+
+    try {
+      const response = await apiRequest('/doctors/chat', {
+        method: 'POST',
+        body: JSON.stringify({
+          question: question,
+          patient_id: patientId,
+          appointment_id: appointmentId
+        })
+      });
+
+      if (response.success) {
+        const assistantMessage = {
+          role: 'assistant',
+          content: response.data.answer,
+          intent: response.data.intent,
+          confidence: response.data.confidence
+        };
+        setChatMessages(prev => [...prev, assistantMessage]);
+      } else {
+        throw new Error(response.error || 'Chat request failed');
+      }
+    } catch (error) {
+      console.error('Error sending chat message:', error);
+      const errorMessage = {
+        role: 'assistant',
+        content: `Error: ${error.message || 'Failed to get response from AI assistant'}`,
+        error: true
+      };
+      setChatMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setChatLoading(false);
     }
   };
 
@@ -362,6 +519,13 @@ const ActiveSession = () => {
             });
             // Update local transcription state if loaded
             setTranscription(apiData.discussion);
+            // Mark transcript as recorded if it exists
+            setTranscriptRecorded(true);
+          }
+          
+          // Check if documents are uploaded (reports or tests exist)
+          if ((apiData.reports && apiData.reports.length > 0) || (apiData.tests && apiData.tests.length > 0)) {
+            setDocumentsUploaded(true);
           }
 
           // Fetch previous appointments
@@ -408,6 +572,7 @@ const ActiveSession = () => {
           const transformedAppointment = {
             ...apiData,
             id: apiData._id,
+            patientId: apiData.patient_id || apiData.patient?._id || apiData.patient?.id,
             patientName: apiData.patient?.name || 'Unknown Patient',
             patientAge: apiData.patient?.age || 'N/A',
             patientGender: apiData.patient?.gender || 'N/A',
@@ -510,7 +675,7 @@ const ActiveSession = () => {
                  activity.type === ACTIVITY_TYPES.REPORT ? <FileText /> :
                  activity.type === ACTIVITY_TYPES.TESTS ? <TestTube2 /> :
                  activity.type === ACTIVITY_TYPES.DIAGNOSIS ? <Brain /> : <Plus />;
-
+    
     return (
       <div className={`card border-2 ${getActivityColor(activity.type)}`}>
         <div className="flex items-start justify-between mb-3">
@@ -940,7 +1105,7 @@ const ActiveSession = () => {
               onClick={handleStartRecording}
               className="btn-primary flex items-center justify-center w-full"
             >
-              <Mic className="w-4 h-4 mr-2" />
+                <Mic className="w-4 h-4 mr-2" />
               {session?.requiredCompleted?.recording ? 'Start New Recording' : 'Start Recording'}
             </button>
           ) : (
@@ -950,24 +1115,145 @@ const ActiveSession = () => {
             >
               <Square className="w-4 h-4 mr-2" />
               Stop Recording ({formatDuration(recordingDuration)})
-            </button>
-          )}
+              </button>
+            )}
         </div>
 
-        {!requiredComplete && (
-          <div className="mt-4 flex space-x-3">
-            {session?.requiredCompleted?.recording && !session?.requiredCompleted?.documents && (
-              <button className="btn-primary flex-1 flex items-center justify-center">
-                <Upload className="w-4 h-4 mr-2" />
+        {/* Document Upload Section - Show after transcript is recorded */}
+        {transcriptRecorded && !documentsUploaded && (
+          <div className="mt-4 card bg-purple-50 border-2 border-purple-300">
+            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+              <Upload className="w-5 h-5 mr-2 text-purple-600" />
                 Upload Documents
-              </button>
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Upload medical documents, test results, or reports for this appointment.
+            </p>
+            
+            <div className="mb-4">
+              <input
+                type="file"
+                id="document-upload"
+                multiple
+                accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+                onChange={handleDocumentUpload}
+                className="hidden"
+                disabled={uploading}
+              />
+              <label
+                htmlFor="document-upload"
+                className={`btn-primary flex items-center justify-center cursor-pointer ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {uploading ? (
+                  <>
+                    <Loader className="w-4 h-4 mr-2 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Select Files to Upload
+                  </>
+                )}
+              </label>
+            </div>
+            
+            {uploadedFiles.length > 0 && (
+              <div className="mt-4">
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Uploaded Files:</h4>
+                <div className="space-y-2">
+                  {uploadedFiles.map((file, idx) => (
+                    <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-2">
+                      <div className="flex items-center space-x-2">
+                        <FileText className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm text-gray-700">{file.name}</span>
+                      </div>
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
-            {session?.requiredCompleted?.recording && session?.requiredCompleted?.documents && !session?.requiredCompleted?.report && (
-              <button className="btn-primary flex-1 flex items-center justify-center">
-                <Sparkles className="w-4 h-4 mr-2" />
-                Generate Report with AI
+          </div>
+        )}
+        
+        {/* Chat Section - Show after documents are uploaded */}
+        {transcriptRecorded && documentsUploaded && (
+          <div className="mt-6 card bg-blue-50 border-2 border-blue-300">
+            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+              <MessageSquare className="w-5 h-5 mr-2 text-blue-600" />
+              AI Chat Assistant
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Ask questions about this appointment, patient history, test results, or diagnosis.
+            </p>
+            
+            {/* Chat Messages */}
+            <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4 max-h-96 overflow-y-auto">
+              {chatMessages.length === 0 ? (
+                <div className="text-center text-gray-500 py-8">
+                  <MessageSquare className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                  <p className="text-sm">Start a conversation by asking a question</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {chatMessages.map((msg, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-[80%] rounded-lg p-3 ${
+                          msg.role === 'user'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-100 text-gray-900'
+                        }`}
+                      >
+                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        {msg.intent && (
+                          <p className="text-xs mt-2 opacity-75">
+                            Intent: {msg.intent} (confidence: {(msg.confidence * 100).toFixed(0)}%)
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {chatLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-gray-100 rounded-lg p-3">
+                        <Loader className="w-4 h-4 animate-spin text-gray-600" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {/* Chat Input */}
+            <form onSubmit={handleChatSubmit} className="flex space-x-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Ask a question about this appointment..."
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={chatLoading}
+              />
+              <button
+                type="submit"
+                disabled={!chatInput.trim() || chatLoading}
+                className="btn-primary flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {chatLoading ? (
+                  <Loader className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <MessageSquare className="w-4 h-4 mr-2" />
+                    Send
+                  </>
+                )}
               </button>
-            )}
+            </form>
           </div>
         )}
       </div>
@@ -1004,9 +1290,9 @@ const ActiveSession = () => {
                 >
                   <Download className="w-4 h-4 mr-1" />
                   Export
-                </button>
-              )}
-            </div>
+              </button>
+            )}
+          </div>
           </div>
           
           <div className="bg-white border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
@@ -1028,7 +1314,7 @@ const ActiveSession = () => {
                 <p className="text-sm text-gray-400 italic">Waiting for audio transcription...</p>
               )}
             </div>
-          </div>
+      </div>
           
           {isRecording && (
             <div className="mt-3 flex items-center justify-between text-sm text-gray-600">
@@ -1123,7 +1409,7 @@ const ActiveSession = () => {
             </button>
           </div>
         </div>
-      )}      
+      )}
 
       {/* Session Controls */}
       <div className="card mt-6 bg-gray-50">

@@ -1,22 +1,27 @@
 """
 Intent Classification Service for Doctor Chatbot
-Uses Gemini to classify doctor questions into specific intents
+Uses Featherless AI to classify doctor questions into specific intents
 """
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 from typing import Literal
 import os
 
-from src.config import GEMINI_API_KEY
+from src.config import FEATHERLESS_API_KEY
 
-# Initialize Gemini for intent classification - use same model as main LLM
-intent_llm = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash-exp",  # Use same model as main LLM
+if not FEATHERLESS_API_KEY:
+    raise ValueError("FEATHERLESS_API_KEY environment variable is required. Get your API key from https://featherless.ai")
+
+# Initialize Featherless AI for intent classification - use same model as main LLM
+intent_llm = ChatOpenAI(
+    model="m42-health/Llama3-Med42-70B",  # Medical-focused model
     temperature=0,
-    google_api_key=GEMINI_API_KEY
+    base_url="https://api.featherless.ai/v1",
+    api_key=FEATHERLESS_API_KEY or "",  # Ensure string type
+    timeout=60
 )
 
 
@@ -80,7 +85,7 @@ async def classify_intent(question: str) -> IntentClassification:
         # Update prompt to include format instructions
         format_instructions = parser.get_format_instructions()
         prompt_with_format = INTENT_CLASSIFICATION_PROMPT.partial(format_instructions=format_instructions)
-        
+        # print(prompt_with_format)
         # Create chain with parser
         chain = prompt_with_format | intent_llm | parser
         

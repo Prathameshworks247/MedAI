@@ -7,7 +7,7 @@ from src.middlewares.auth import check_doctor_exists
 from src.services.chatbot_intent import classify_intent
 from src.services.chatbot_context import build_chatbot_context, verify_doctor_patient_access
 from src.services.chatbot_prompts import build_chatbot_prompt
-from src.llm.gemini import llm
+from src.llm.featherless import llm
 
 router = APIRouter()
 
@@ -111,8 +111,8 @@ async def doctor_chat(
             question=question
         )
         
-        # Step 5: Generate answer using Gemini
-        print(f"🤖 Generating answer with Gemini...")
+        # Step 5: Generate answer using Featherless AI
+        print(f"🤖 Generating answer with Featherless AI...")
         chain = prompt | llm
         response = chain.invoke({"question": question})
         

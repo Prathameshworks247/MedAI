@@ -375,5 +375,5 @@ async def build_chatbot_context(
         current = await get_appointment_context(appointment_id)
         if current:
             context["data"]["current_appointment"] = current
-    
+    # print(context)
     return context

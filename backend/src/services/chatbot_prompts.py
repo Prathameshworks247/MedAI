@@ -131,5 +131,5 @@ Remember: Only use information from the DATABASE CONTEXT above. If information i
         ("system", system_message),
         ("human", "Doctor's Question: {question}\n\nProvide a clear, evidence-based answer using ONLY the database context provided above.")
     ])
-    
+    print(prompt)
     return prompt
