@@ -607,7 +607,7 @@ def extract_text_from_pdf(file_path: str) -> str:
     except ImportError:
         # Fallback if pdfplumber not installed
         try:
-            import PyPDF2
+            import PyPDF2 #pyright: ignore[reportMissingImports]
             text_content = []
             with open(file_path, "rb") as file:
                 pdf_reader = PyPDF2.PdfReader(file)

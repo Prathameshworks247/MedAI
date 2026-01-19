@@ -11,7 +11,7 @@ async def process_medical_document(
     document_text: str,
     patient_id: str,
     appointment_id: str,
-    file_path: str = None
+    file_path: str = None 
 ) -> dict:
     """
     Sequential pipeline to process medical documents using tools.
