@@ -48,17 +48,15 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
                 }
             ],
             "patient_profile_updates": {
-                "medical_history": list,
-                "allergies": list,
-                "medications": list,
-                "conditions": list
+                "medical_history": list  # Single array containing all medical history items
             },
             "time_series_observations": [
                 {
-                    "metric": str,  # e.g., "blood_pressure", "heart_rate", "temperature"
+                    "metric": str,  # Must be: "blood_pressure", "heart_rate", "temperature", "glucose", "cholesterol", "hemoglobin", "wbc", "rbc", "platelets"
                     "value": float,
-                    "unit": str,     # e.g., "mmHg", "bpm", "°C"
-                    "timestamp": str  # ISO8601 format
+                    "unit": str,     # e.g., "mmHg", "bpm", "°C", "mg/dL"
+                    "timestamp": str,  # ISO8601 format
+                    "is_anamoly": bool  # True if value is outside normal range
                 }
             ]
         }
@@ -101,15 +99,20 @@ EXTRACTION GUIDELINES:
    - IMPORTANT: Group all tests from the same source document together - do NOT create separate documents for each test
 
 4. patient_profile_updates (dict):
-   - medical_history: Array of past medical conditions/events (list of strings)
-   - allergies: Array of known allergies (list of strings)
-   - medications: Array of current medications (list of strings)
-   - conditions: Array of chronic conditions (list of strings)
+   - medical_history: Array of ALL medical history items (list of strings)
+   - Include in this single array: allergies, diseases, conditions, past surgeries, chronic illnesses, medications, and any other medical history items found
+   - Format each item as a descriptive string, e.g., "Allergy: Penicillin", "Condition: Hypertension", "Medication: Aspirin 81mg daily", "Past Surgery: Appendectomy (2020)"
+   - Example: ["Allergy: Penicillin", "Condition: Hypertension", "Condition: Diabetes Type 2", "Medication: Metformin 500mg twice daily", "Past Surgery: Appendectomy (2020)"]
+   - IMPORTANT: Put ALL medical history information in this single array, not in separate fields
 
 5. time_series_observations (array of objects):
    - ONLY include if there are repeated measurements over time (vitals, lab trends, etc.)
-   - Each observation must have: "metric" (string), "value" (number), "unit" (string), "timestamp" (ISO8601 string)
-   - Example: [{{"metric": "blood_pressure", "value": 120.0, "unit": "mmHg", "timestamp": "2025-01-11T10:30:00"}}]
+   - Each observation MUST have ALL of these fields: "metric" (string), "value" (number), "unit" (string), "timestamp" (ISO8601 string), "is_anamoly" (boolean)
+   - CRITICAL: "is_anamoly" is REQUIRED for every time_series_observation. It MUST be included as a boolean value (true or false).
+   - Allowed metric names: "blood_pressure", "heart_rate", "temperature", "glucose", "cholesterol", "hemoglobin", "wbc", "rbc", "platelets"
+   - "is_anamoly" should be true if the value is outside normal range, false otherwise
+   - Normal ranges: blood_pressure (90-140/60-90), heart_rate (60-100 bpm), temperature (36.1-37.2°C), glucose (70-100 mg/dL fasting), cholesterol (<200 mg/dL), hemoglobin (12-16 g/dL), wbc (4-11 x10^9/L), rbc (4.5-5.5 x10^12/L), platelets (150-450 x10^9/L)
+   - Example: [{{"metric": "blood_pressure", "value": 145.0, "unit": "mmHg", "timestamp": "2025-01-11T10:30:00", "is_anamoly": true}}, {{"metric": "heart_rate", "value": 72.0, "unit": "bpm", "timestamp": "2025-01-11T10:30:00", "is_anamoly": false}}]
    - NOTE: Test results from lab reports should go in the "tests" array with values in "description", NOT in time_series_observations
    - Only use time_series_observations for actual time-series data (multiple measurements over time)
 
@@ -143,6 +146,34 @@ Extract structured medical data following the schema exactly.
         # Invoke chain with parser and get Pydantic model
         try:
             result_model = chain_with_parser.invoke({"document_text": document_text})
+            # Post-process the result to fix common issues
+            result_dict = result_model.model_dump()
+            
+            # Fix patient_profile_updates if it's a list
+            if "patient_profile_updates" in result_dict:
+                if isinstance(result_dict["patient_profile_updates"], list):
+                    result_dict["patient_profile_updates"] = {}
+                    print("🔧 Fixed: Converted patient_profile_updates from list to dict")
+                elif result_dict["patient_profile_updates"] is None:
+                    result_dict["patient_profile_updates"] = {}
+            
+            # Fix null descriptions in tests
+            if "tests" in result_dict:
+                for test_doc in result_dict["tests"]:
+                    if "tests" in test_doc:
+                        for test_item in test_doc["tests"]:
+                            if test_item.get("description") is None:
+                                test_item["description"] = ""
+            
+            # Fix missing is_anamoly in time_series_observations
+            if "time_series_observations" in result_dict:
+                for obs in result_dict["time_series_observations"]:
+                    if "is_anamoly" not in obs or obs.get("is_anamoly") is None:
+                        obs["is_anamoly"] = False
+                        print(f"🔧 Fixed: Added missing is_anamoly=False for {obs.get('metric', 'unknown')}")
+            
+            # Re-validate with fixed data
+            result_model = ExtractionResult.model_validate(result_dict)
         except Exception as parse_error:
             # If parsing fails, try to fix null values and retry
             print(f"⚠️  Parsing error, attempting to fix null values: {parse_error}")
@@ -158,6 +189,7 @@ Extract structured medical data following the schema exactly.
                 json_str = re.sub(r'"description":\s*null', '"description": ""', json_str)
                 # Parse and validate manually
                 json_obj = json.loads(json_str)
+                
                 # Fix any remaining null descriptions
                 if "tests" in json_obj:
                     for test_doc in json_obj["tests"]:
@@ -166,6 +198,22 @@ Extract structured medical data following the schema exactly.
                                 if test_item.get("description") is None:
                                     test_item["description"] = ""
                 
+                # Fix patient_profile_updates if it's a list instead of dict
+                if "patient_profile_updates" in json_obj:
+                    if isinstance(json_obj["patient_profile_updates"], list):
+                        json_obj["patient_profile_updates"] = {}
+                        print("🔧 Fixed: Converted patient_profile_updates from list to dict")
+                    elif json_obj["patient_profile_updates"] is None:
+                        json_obj["patient_profile_updates"] = {}
+                
+                # Fix missing is_anamoly in time_series_observations
+                if "time_series_observations" in json_obj:
+                    for obs in json_obj["time_series_observations"]:
+                        if "is_anamoly" not in obs or obs.get("is_anamoly") is None:
+                            # Set default to False if missing
+                            obs["is_anamoly"] = False
+                            print(f"🔧 Fixed: Added missing is_anamoly=False for {obs.get('metric', 'unknown')}")
+                
                 # Create Pydantic model from fixed JSON
                 result_model = ExtractionResult.model_validate(json_obj)
             else:
@@ -173,6 +221,56 @@ Extract structured medical data following the schema exactly.
         
         # Convert Pydantic model to dict
         result = result_model.model_dump()
+        
+        # Final post-processing: Ensure patient_profile_updates is a dict (not list)
+        if "patient_profile_updates" in result:
+            if isinstance(result["patient_profile_updates"], list):
+                result["patient_profile_updates"] = {}
+                print("🔧 Fixed: Converted patient_profile_updates from list to dict (final check)")
+            elif result["patient_profile_updates"] is None:
+                result["patient_profile_updates"] = {}
+        
+        # Final check: Fix any remaining null descriptions
+        if "tests" in result:
+            for test_doc in result["tests"]:
+                if "tests" in test_doc:
+                    for test_item in test_doc["tests"]:
+                        if test_item.get("description") is None:
+                            test_item["description"] = ""
+                            print("🔧 Fixed: Converted null description to empty string (final check)")
+        
+        # Final check: Ensure is_anamoly is present in time_series_observations
+        if "time_series_observations" in result:
+            for obs in result["time_series_observations"]:
+                if "is_anamoly" not in obs or obs.get("is_anamoly") is None:
+                    # Determine if value is anomalous based on metric and value
+                    metric = obs.get("metric", "").lower()
+                    value = obs.get("value", 0.0)
+                    is_anomalous = False
+                    
+                    # Check against normal ranges
+                    if metric == "blood_pressure":
+                        # Assuming systolic value (simplified check)
+                        is_anomalous = value < 90 or value > 140
+                    elif metric == "heart_rate":
+                        is_anomalous = value < 60 or value > 100
+                    elif metric == "temperature":
+                        is_anomalous = value < 36.1 or value > 37.2
+                    elif metric == "glucose":
+                        is_anomalous = value < 70 or value > 100
+                    elif metric == "cholesterol":
+                        is_anomalous = value >= 200
+                    elif metric == "hemoglobin":
+                        is_anomalous = value < 12 or value > 16
+                    elif metric == "wbc":
+                        is_anomalous = value < 4 or value > 11
+                    elif metric == "rbc":
+                        is_anomalous = value < 4.5 or value > 5.5
+                    elif metric == "platelets":
+                        is_anomalous = value < 150 or value > 450
+                    
+                    obs["is_anamoly"] = is_anomalous
+                    print(f"🔧 Fixed: Added is_anamoly={is_anomalous} for {metric} (value: {value})")
         
         # Post-process: Merge test documents with the same doc_id
         if "tests" in result and len(result["tests"]) > 0:
@@ -397,21 +495,74 @@ async def _save_to_mongo_impl(
                 )
                 print(f"✓ Updated patient profile: {patient_id}")
         
-        # 5. Store time series observations
+        # 5. Store time series observations in new structure
         if extracted.get("time_series_observations"):
+            # Get existing patient to preserve existing time series data
+            existing_patient = await user_collection.find_one({"_id": patient_object_id})
+            existing_time_series = existing_patient.get("time_series", {}) if existing_patient else {}
+            existing_metrics = existing_time_series.get("metrics", {}) if isinstance(existing_time_series, dict) else {}
+            
+            # Normalize existing metrics: convert datetime keys to ISO strings if needed
+            normalized_metrics = {}
+            for metric_name, time_series_dict in existing_metrics.items():
+                if isinstance(time_series_dict, dict):
+                    normalized_dict = {}
+                    for key, value in time_series_dict.items():
+                        # Convert datetime keys to ISO strings
+                        if isinstance(key, datetime):
+                            key_str = key.isoformat()
+                        elif isinstance(key, str):
+                            key_str = key
+                        else:
+                            key_str = str(key)
+                        normalized_dict[key_str] = value
+                    normalized_metrics[metric_name] = normalized_dict
+                else:
+                    normalized_metrics[metric_name] = time_series_dict
+            
+            # Allowed metric names matching PatientMetrics model
+            allowed_metrics = [
+                "blood_pressure", "heart_rate", "temperature", "glucose",
+                "cholesterol", "hemoglobin", "wbc", "rbc", "platelets"
+            ]
+            
+            # Process each observation
             for obs in extracted["time_series_observations"]:
-                time_series_doc = {
-                    "patient_id": patient_id,
-                    "metric": obs.get("metric", ""),
+                metric_name = obs.get("metric", "").lower()
+                
+                # Skip if metric name is not in allowed list
+                if metric_name not in allowed_metrics:
+                    print(f"⚠️  Skipping invalid metric: {metric_name}")
+                    continue
+                
+                # Parse timestamp
+                try:
+                    timestamp = datetime.fromisoformat(obs["timestamp"]) if isinstance(obs.get("timestamp"), str) else datetime.now()
+                except:
+                    timestamp = datetime.now()
+                
+                # Create MetricValue
+                metric_value = {
                     "value": obs.get("value", 0.0),
-                    "unit": obs.get("unit", ""),
-                    "timestamp": datetime.fromisoformat(obs["timestamp"]) if isinstance(obs.get("timestamp"), str) else datetime.now()
+                    "is_anamoly": obs.get("is_anamoly", False)
                 }
-                await user_collection.update_one(
-                    {"_id": patient_object_id},
-                    {"$addToSet": {"time_series": time_series_doc}}
-                )
-            print(f"✓ Stored {len(extracted['time_series_observations'])} time-series observations")
+                
+                # Initialize metric time series if it doesn't exist
+                if metric_name not in normalized_metrics:
+                    normalized_metrics[metric_name] = {}
+                
+                # Add or update the value at this timestamp
+                # Convert datetime to string key for MongoDB storage
+                timestamp_key = timestamp.isoformat()
+                normalized_metrics[metric_name][timestamp_key] = metric_value
+            
+            # Update patient with new time series structure
+            updated_time_series = {"metrics": normalized_metrics}
+            await user_collection.update_one(
+                {"_id": patient_object_id},
+                {"$set": {"time_series": updated_time_series, "updated_at": datetime.now()}}
+            )
+            print(f"✓ Stored {len(extracted['time_series_observations'])} time-series observations in new structure")
         
         return "Successfully saved all extracted data to MongoDB"
         

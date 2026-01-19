@@ -20,10 +20,11 @@ class LLMTestDocument(BaseModel):
     tests: List[LLMTestItem]
 
 class TimeSeriesMetric(BaseModel):
-    metric: str
+    metric: str  # Must be one of: blood_pressure, heart_rate, temperature, glucose, cholesterol, hemoglobin, wbc, rbc, platelets
     value: float
     unit: str
-    timestamp: str
+    timestamp: str  # ISO8601 format
+    is_anamoly: bool = False  # True if value is outside normal range
 
 class ExtractionResult(BaseModel):
     appointment_updates: Dict
