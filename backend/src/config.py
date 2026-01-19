@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pwdlib import PasswordHash
 
 load_dotenv()
@@ -20,4 +20,6 @@ ALGORITHM = os.getenv('ALGORITHM', 'HS256')
 ACCESS_TOKEN_EXPIRE_MINUTES = os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '10080')  # 7 days default
 
 password_hash = PasswordHash.recommended()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# Use HTTPBearer for simpler Swagger UI (just Bearer token, no OAuth2 flow)
+http_bearer = HTTPBearer(auto_error=False)

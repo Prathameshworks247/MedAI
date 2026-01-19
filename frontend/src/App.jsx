@@ -36,7 +36,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
-            <Route path="/diagnosis" element={<DiagnosisDashboard />} />
+            <Route path="/doctor/session/:appointmentId/diagnosis" element={<DiagnosisDashboard />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
