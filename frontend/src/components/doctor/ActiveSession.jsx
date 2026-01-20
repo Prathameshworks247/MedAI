@@ -1177,7 +1177,7 @@ const ActiveSession = () => {
               {appointment.type === 'followup' && (
                 <div className="mt-3 p-3 bg-purple-100 border border-purple-200 rounded-lg">
                   <p className="text-sm font-semibold text-purple-900">
-                    🔄 Followup Visit #{appointment.appointmentNumber}
+                    🔄 Follow Up Visit #{appointment.appointmentNumber}
                   </p>
                 </div>
               )}
