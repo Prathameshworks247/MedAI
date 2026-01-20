@@ -4,6 +4,7 @@ Ensures LLM only uses provided database context
 """
 
 from langchain_core.prompts import ChatPromptTemplate
+from typing import Optional
 
 # Base system prompt with strict anti-hallucination rules
 ANTI_HALLUCINATION_SYSTEM_PROMPT = """You are a clinical AI assistant for doctors. Your role is to help doctors analyze patient data stored in the database.
@@ -28,10 +29,12 @@ CRITICAL RULES - YOU MUST FOLLOW THESE STRICTLY:
 
 7. **MEDICAL DISCLAIMER**: Always include a disclaimer that your analysis is based on database records and should be verified by the doctor.
 
+8. **CONVERSATION CONTEXT**: You may reference previous messages in the conversation for continuity, but always base your answers on the database context provided. If a question refers to something mentioned earlier in the conversation, you can acknowledge it, but verify facts against the database.
+
 Remember: Your credibility depends on accuracy. Never invent data."""
 
 
-def build_chatbot_prompt(intent: str, context: dict, question: str) -> ChatPromptTemplate:
+def build_chatbot_prompt(intent: str, context: dict, question: str, conversation_history: Optional[list] = None) -> ChatPromptTemplate:
     """
     Build a context-specific prompt based on intent.
     
@@ -39,6 +42,7 @@ def build_chatbot_prompt(intent: str, context: dict, question: str) -> ChatPromp
         intent: The classified intent
         context: The retrieved database context
         question: The doctor's question
+        conversation_history: Previous conversation messages for context
         
     Returns:
         ChatPromptTemplate with appropriate prompt
@@ -46,7 +50,29 @@ def build_chatbot_prompt(intent: str, context: dict, question: str) -> ChatPromp
     
     # Format context as JSON string for the prompt
     import json
+    
+    # Truncate context if too large to stay within token limits
+    # Estimate: ~4 characters per token, so 4096 tokens = ~16KB
+    # Reserve space for system prompt (~500 tokens), conversation history (~500 tokens), question (~100 tokens)
+    # So we have ~3000 tokens = ~12KB for context
+    MAX_CONTEXT_CHARS = 12000
+    
     context_json_raw = json.dumps(context, indent=2, default=str)
+    
+    # Truncate if too large
+    if len(context_json_raw) > MAX_CONTEXT_CHARS:
+        # Try to truncate intelligently - keep structure but reduce content
+        truncated = context_json_raw[:MAX_CONTEXT_CHARS]
+        # Try to close JSON properly
+        if truncated.rstrip().endswith('"'):
+            truncated += '"\n... (context truncated due to size limits)'
+        elif truncated.rstrip().endswith(','):
+            truncated = truncated.rstrip(',') + '\n... (context truncated due to size limits)'
+        else:
+            truncated += '\n... (context truncated due to size limits)'
+        context_json_raw = truncated
+        print(f"⚠️  Context truncated from {len(json.dumps(context, indent=2, default=str))} to {len(context_json_raw)} characters")
+    
     # Escape curly braces in JSON for .format() - double them so they're treated as literals
     context_json = context_json_raw.replace("{", "{{").replace("}", "}}")
     
@@ -127,9 +153,42 @@ Remember: Only use information from the DATABASE CONTEXT above. If information i
         context_json=context_json  # Use original JSON, not escaped version
     )
     
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_message),
-        ("human", "Doctor's Question: {question}\n\nProvide a clear, evidence-based answer using ONLY the database context provided above.")
-    ])
-    print(prompt)
+    # Build messages list with system message, conversation history, and current question
+    messages = [("system", system_message)]
+    
+    # Add conversation history if provided
+    # Limit to last 5 messages to avoid token limits
+    if conversation_history:
+        # Take only the last 5 messages to stay within token limits
+        recent_history = conversation_history[-5:] if len(conversation_history) > 5 else conversation_history
+        
+        for msg in recent_history:
+            role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
+            content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
+            
+            # Skip if role or content is missing
+            if not role or not content:
+                continue
+            
+            # Truncate very long messages to avoid token limits
+            # Limit each message to ~500 characters (~125 tokens)
+            MAX_MESSAGE_LENGTH = 500
+            content_str = str(content)
+            if len(content_str) > MAX_MESSAGE_LENGTH:
+                content_str = content_str[:MAX_MESSAGE_LENGTH] + "... (message truncated)"
+            
+            # Escape curly braces in content to prevent template variable interpretation
+            # Replace { with {{ and } with }} to make them literal
+            # This prevents ChatPromptTemplate from interpreting {error} or {question} as variables
+            escaped_content = content_str.replace("{", "{{").replace("}", "}}")
+                
+            if role == "user":
+                messages.append(("human", escaped_content))
+            elif role == "assistant":
+                messages.append(("assistant", escaped_content))
+    
+    # Add current question
+    messages.append(("human", "Doctor's Question: {question}\n\nProvide a clear, evidence-based answer using ONLY the database context provided above. If this question refers to previous messages in our conversation, you may reference them, but always base your answer on the database context."))
+    
+    prompt = ChatPromptTemplate.from_messages(messages)
     return prompt

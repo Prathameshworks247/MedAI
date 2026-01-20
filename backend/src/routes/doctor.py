@@ -13,10 +13,15 @@ router = APIRouter()
 
 
 # Request/Response Models
+class ChatMessage(BaseModel):
+    role: str = Field(..., description="Message role: 'user' or 'assistant'")
+    content: str = Field(..., description="Message content")
+
 class ChatRequest(BaseModel):
     question: str = Field(..., description="The doctor's question about the patient")
     patient_id: str = Field(..., description="Patient ID to query")
     appointment_id: str = Field(..., description="Appointment ID (required) - chatbot is appointment-specific. Context includes current appointment and previous 2 appointments + base")
+    conversation_history: Optional[list[ChatMessage]] = Field(default=[], description="Previous conversation messages for context")
 
 
 class ChatResponse(BaseModel):
@@ -104,11 +109,12 @@ async def doctor_chat(
         )
         print(f"✅ Context built: {len(str(context))} characters")
         
-        # Step 4: Build prompt with strict anti-hallucination instructions
+        # Step 4: Build prompt with strict anti-hallucination instructions and conversation history
         prompt = build_chatbot_prompt(
             intent=intent,
             context=context["data"],
-            question=question
+            question=question,
+            conversation_history=request.conversation_history or []
         )
         
         # Step 5: Generate answer using Featherless AI

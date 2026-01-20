@@ -458,12 +458,20 @@ const ActiveSession = () => {
     setChatLoading(true);
 
     try {
+      // Prepare conversation history (last 5 messages to avoid token limits)
+      // Reduced from 10 to 5 to stay within model's 4096 token limit
+      const recentHistory = chatMessages.slice(-5).map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+      
       const response = await apiRequest('/doctors/chat', {
         method: 'POST',
         body: JSON.stringify({
           question: question,
           patient_id: patientId,
-          appointment_id: appointmentId
+          appointment_id: appointmentId,
+          conversation_history: recentHistory
         })
       });
 
