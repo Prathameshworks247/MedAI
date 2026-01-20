@@ -498,11 +498,12 @@ async def live_detection(websocket: WebSocket):
                     try:
                         # Get appointment to extract patient_id
                         appointment = await appointment_collection.find_one({"_id": appointment_object_id})
-                        if appointment and appointment.get("patient_id"):
+                        if appointment and appointment.get("patient_id") and appointment_id:
                             patient_id = appointment["patient_id"]
                             print(f"🔄 Processing transcript through LLM extraction pipeline...")
                             
                             # Process the transcript through the same pipeline as documents
+                            # Mark as transcript so discussion_summary can be updated
                             extraction_result = await process_medical_document(
                                 document_text=final_text,
                                 patient_id=patient_id,
@@ -510,12 +511,12 @@ async def live_detection(websocket: WebSocket):
                                 file_path=None  # No PDF, just text
                             )
                             
-                            if extraction_result.get("errors"):
+                            if extraction_result and extraction_result.get("errors"):
                                 print(f"⚠️  LLM extraction errors: {extraction_result['errors']}")
-                            else:
+                            elif extraction_result:
                                 print(f"✅ Successfully extracted and saved clinical information from transcript")
                         else:
-                            print(f"⚠️  Could not find patient_id in appointment, skipping LLM extraction")
+                            print(f"⚠️  Could not find patient_id or appointment_id, skipping LLM extraction")
                     except Exception as e:
                         print(f"⚠️  Error processing transcript through LLM pipeline: {e}")
                         import traceback
@@ -539,3 +540,5 @@ async def live_detection(websocket: WebSocket):
                 await websocket.close()
         except:
             pass  # Already closed or error closing
+    
+@router.post(f"/{appointment_id}/diagnosis")
