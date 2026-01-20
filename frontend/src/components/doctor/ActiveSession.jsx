@@ -201,7 +201,7 @@ const UploadSection = ({ title, icon: Icon, colorClass, borderClass, accept, onU
           htmlFor={id}
           className={`btn-secondary w-full flex items-center justify-center cursor-pointer ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
       >
-          {uploading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+          {uploading ? <Loader className="w-4 h-4 mr-3 animate-spin" /> : <Upload className="w-4 h-4 mr-3" />}
           Upload {title}
       </label>
        {uploadedFiles && uploadedFiles.length > 0 && (
@@ -930,14 +930,10 @@ const ActiveSession = () => {
           const transformedAppointment = {
             ...apiData,
             id: apiData._id,
-            patientId: apiData.patient_id || apiData.patient?._id || apiData.patient?.id,
-            patientName: apiData.patient?.name || 'Unknown Patient',
-            patientAge: apiData.patient?.age || 'N/A',
-            patientGender: apiData.patient?.gender || 'N/A',
-            scheduledTime: apiData.start_time ? new Date(apiData.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A',
-            type: type,
             appointmentNumber: visitNum,
+            type: type,            
             previousAppointments: previousAppointments,
+            scheduledTime: apiData.start_time ? new Date(apiData.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A',
             session: {
               startedAt: apiData.start_time ? new Date(apiData.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A',
               totalDuration: '00:00', // Placeholder
@@ -951,6 +947,8 @@ const ActiveSession = () => {
           };
           
           setAppointment(transformedAppointment);
+          setUploadedReports(apiData.reports);
+          setUploadedTests(apiData.tests);
         } else {
           setError('Failed to fetch appointment details');
         }
@@ -993,16 +991,10 @@ const ActiveSession = () => {
   }
 
   const session = appointment.session;
-  const activities = session?.activities || [];
-  
   // Check if finalized based on discussion length
-  const isFinalized = (session?.discussion_summary && session.discussion_summary.length > 0)
-  console.log(session?.discussion_summary);
-
+  const isFinalized = (appointment?.discussion_summary &&  appointment?.discussion_summary.length > 0)
   // Use local Logic or Helper.
   const requiredComplete = session?.requiredCompleted?.recording && session?.requiredCompleted?.documents && session?.requiredCompleted?.report;
-
-  const appointmentNo = appointment.id.split("-")[1];
 
   const getStatusBadge = (status) => {
     const badges = {
@@ -1171,8 +1163,9 @@ const ActiveSession = () => {
                 <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                 <h2 className="text-2xl font-bold text-gray-900">ACTIVE SESSION</h2>
               </div>
-              <h3 className="text-xl font-semibold text-gray-800 mb-1">{appointment.patientName}</h3>
-              <p className="text-sm text-gray-600">{appointment.patientAge} years • {appointment.patientGender} • {appointment.scheduledTime}</p>
+              <h3 className="text-xl font-semibold text-gray-800 mb-1">{appointment.patient.name}</h3>
+              <p className="text-sm text-gray-600 font-semibold mb-1 capitalize">Chief Complaint: {appointment.chief_complaint}</p>
+              <p className="text-sm text-gray-600">{appointment.patient.age} years • {appointment.patient.gender} • {appointment.scheduledTime}</p>
               
               {appointment.type === 'followup' && (
                 <div className="mt-3 p-3 bg-purple-100 border border-purple-200 rounded-lg">
@@ -1221,34 +1214,32 @@ const ActiveSession = () => {
         appointmentId={appointmentId}
       />
 
-      {isFinalized && (
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-             <UploadSection 
-                title="Reports" 
-                icon={FileText} 
-                colorClass="bg-purple-50" 
-                borderClass="border-purple-300"
-                accept=".pdf,.doc,.docx,.txt"
-                onUpload={(e) => handleFileUpload(e, 'report')}
-                uploading={uploading}
-                uploadedFiles={uploadedReports.length > 0 ? uploadedReports : session.reports} 
-             />
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <UploadSection 
+            title="Reports" 
+            icon={FileText} 
+            colorClass="bg-purple-50" 
+            borderClass="border-purple-300"
+            accept=".pdf,.doc,.docx,.txt"
+            onUpload={(e) => handleFileUpload(e, 'report')}
+            uploading={uploading}
+            uploadedFiles={uploadedReports.length > 0 ? uploadedReports : session.reports} 
+            />
 
-             <UploadSection 
-                title="Tests & Labs" 
-                icon={TestTube2} 
-                colorClass="bg-orange-50" 
-                borderClass="border-orange-300"
-                accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
-                onUpload={(e) => handleFileUpload(e, 'test')}
-                uploading={uploading}
-                uploadedFiles={uploadedTests.length > 0 ? uploadedTests : session.tests}
-             />
+            <UploadSection 
+            title="Tests & Labs" 
+            icon={TestTube2} 
+            colorClass="bg-orange-50" 
+            borderClass="border-orange-300"
+            accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+            onUpload={(e) => handleFileUpload(e, 'test')}
+            uploading={uploading}
+            uploadedFiles={uploadedTests.length > 0 ? uploadedTests : session.tests}
+            />
         </div>
-      )}
         
       {/* Chat Section - Show after documents are uploaded */}
-        {isFinalized && documentsUploaded && (
+        {documentsUploaded && (
           <div className="mt-6 card bg-blue-50 border-2 border-blue-300">
             <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
               <MessageSquare className="w-5 h-5 mr-2 text-blue-600" />
@@ -1326,10 +1317,6 @@ const ActiveSession = () => {
             </form>
           </div>
         )}
-
-
-
-
 
 
       {/* Additional Actions - Only show after required activities */}
