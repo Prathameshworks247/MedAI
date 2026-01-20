@@ -9,7 +9,7 @@ from src.db import appointment_collection, user_collection
 from src.services.streaming_stt import StreamingTranscriber
 from src.services.whisper_service import transcribe_audio_file
 from src.services.agent import process_medical_document
-from src.services.diagnosis_generator import generate_diagnosis
+from src.services.diagnosis_generator import generate_diagnosis, build_diagnosis_context, convert_med42_to_structured_json
 from src.services.chatbot_context import verify_doctor_patient_access
 
 router = APIRouter()
@@ -598,30 +598,48 @@ async def generate_appointment_diagnosis(
                 detail="You do not have access to this patient's data"
             )
         
-        # Generate diagnoses
-        print(f"🩺 Generating diagnoses for appointment {appointment_id}...")
+        # Step 1: Generate diagnoses using Med42 (plain text)
+        print(f"🩺 Step 1: Generating diagnoses using Med42...")
         diagnosis_text = await generate_diagnosis(
             patient_id=str(patient_id),
             appointment_id=appointment_id
         )
         
-        # Save diagnosis text to appointment
+        # Step 2: Build context for Gemini conversion
+        print(f"📊 Step 2: Building context for Gemini conversion...")
+        context = await build_diagnosis_context(
+            patient_id=str(patient_id),
+            appointment_id=appointment_id
+        )
+        
+        # Step 3: Convert Med42 text to structured JSON using Gemini
+        print(f"🔄 Step 3: Converting to structured JSON using Gemini...")
+        structured_json = await convert_med42_to_structured_json(
+            med42_text=diagnosis_text,
+            patient_id=str(patient_id),
+            appointment_id=appointment_id,
+            context=context
+        )
+        
+        # Step 4: Save both text and structured JSON to appointment
         await appointment_collection.update_one(
             {"_id": appointment_id},
             {
                 "$set": {
-                    "generated_diagnosis_text": diagnosis_text,
+                    "generated_diagnosis_text": diagnosis_text,  # Keep original text
+                    "generated_diagnosis": structured_json,  # Structured JSON for dashboard
                     "diagnosis_generated_at": datetime.now(),
                     "updated_at": datetime.now()
                 }
             }
         )
         
-        print(f"✅ Diagnosis generated and saved to appointment")
+        print(f"✅ Diagnosis generated, converted, and saved to appointment")
         
-        # Return text response
+        # Return structured JSON response
         return {
-            "diagnosis_text": diagnosis_text,
+            "diagnosis": structured_json,
+            "diagnosis_text": diagnosis_text,  # Also include text for reference
             "generated_at": datetime.now().isoformat()
         }
         

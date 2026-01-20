@@ -1,14 +1,18 @@
 """
 Diagnosis Generation Service using Med42
 Generates 5 diagnoses based on comprehensive patient and appointment data
-Returns plain text response (no JSON parsing)
+Step 1: Med42 generates plain text diagnosis
+Step 2: Gemini converts text + context to structured JSON
 """
 from typing import Dict, List, Any, Optional
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
 from datetime import datetime
 import json
+import re
 
-from src.llm.featherless import llm
+from src.llm.featherless import llm as med42_llm
+from src.llm.gemini import llm as gemini_llm
 from src.services.chatbot_context import get_patient_context, get_appointment_sequence, get_appointment_context
 
 
@@ -200,7 +204,7 @@ Generate diagnoses with appropriate ICD-10 codes, confidence scores, and for the
         
         # Invoke LLM
         print(f"🤖 Generating diagnoses using Med42...")
-        chain = prompt | llm
+        chain = prompt | med42_llm
         
         # Get raw text response
         raw_response = chain.invoke({})
@@ -213,6 +217,160 @@ Generate diagnoses with appropriate ICD-10 codes, confidence scores, and for the
         
     except Exception as e:
         print(f"❌ Error generating diagnosis: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+
+
+async def convert_med42_to_structured_json(
+    med42_text: str,
+    patient_id: str,
+    appointment_id: str,
+    context: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Convert Med42 plain text diagnosis to structured JSON using Gemini.
+    
+    Args:
+        med42_text: Plain text diagnosis from Med42
+        patient_id: Patient ID
+        appointment_id: Appointment ID
+        context: Full patient and appointment context
+    
+    Returns:
+        Structured JSON matching the dashboard schema
+    """
+    try:
+        print(f"🔄 Converting Med42 text to structured JSON using Gemini...")
+        
+        # Format context as JSON
+        context_json = json.dumps(context, indent=2, default=str)
+        
+        # Build prompt for Gemini
+        system_prompt = """You are a medical data structuring AI. Your task is to convert a Med42 diagnosis text analysis into a structured JSON format for a clinical dashboard.
+
+CRITICAL RULES:
+1. Extract ALL information from the Med42 text
+2. Use the patient and appointment context to enrich the data
+3. Return ONLY valid JSON - no markdown, no explanations
+4. Follow the exact schema provided
+5. For dates, use ISO 8601 format (YYYY-MM-DD)
+6. For enums, use only the allowed values: "improving" | "worsening" | "stable" for status, "better" | "worse" | "same" for change, "lower" | "higher" for better
+7. Extract test trends from appointment data
+8. Build evidence chain from appointment history
+9. Calculate risk scores where applicable
+10. Create progress metrics comparing baseline to current
+
+OUTPUT SCHEMA (return valid JSON with these exact fields):
+
+Required root fields:
+- patient: object with "name" (string) and "last_updated" (ISO 8601 datetime string)
+- primary_diagnosis: object with "condition" (string), "icd_code" (string ICD-10), "confidence" (number 0.0-1.0), "status" (one of: "improving", "worsening", "stable"), "evidence_chain" (array of objects with "appointment", "date", "value", "change")
+- test_trends: object where keys are test names, values are objects with "test_name", "unit", "normal_range" (array of 2 numbers), "data" (array of objects with "date", "value", "appointment_number")
+- clinical_reasoning: object with "nodes" (array) and "connections" (array)
+  * nodes: array of objects with "id" (string), "label" (string), "type" (one of: "input", "process", "output", "evidence"), "icon" (string emoji)
+  * connections: array of objects with "from" (string node id), "to" (string node id), "label" (optional string)
+- risk_scores: array of objects with "name", "value" (number), "max" (number), "interpretation" (string)
+- progress_metrics: array of objects with "name", "baseline" (number), "current" (number), "unit" (string), "target" (number), "better" (one of: "lower", "higher"), "icon" (string)
+- alternative_diagnoses: array of objects with "icd_10_code", "diagnosis_name", "confidence_score" (number 0.0-1.0), "rationale" (string)
+
+CRITICAL: Return ONLY valid JSON. Do NOT use double curly braces. Use single curly braces for JSON objects. Do NOT wrap in markdown code blocks. Return pure JSON only."""
+
+        human_prompt_template = """MED42 DIAGNOSIS TEXT:
+{med42_text}
+
+PATIENT AND APPOINTMENT CONTEXT:
+{context_data}
+
+Based on the Med42 diagnosis text above and the patient/appointment context, extract and structure all information into the JSON schema provided. 
+
+Key tasks:
+1. Extract primary diagnosis details (condition, ICD code, confidence, status)
+2. Build evidence chain from appointment history showing progression
+3. Extract test trends from appointment test data
+4. Calculate risk scores (TIMI, CHA2DS2-VASc, etc.) if applicable
+5. Create progress metrics comparing baseline to current values
+6. Include all alternative diagnoses with rationale
+7. Use patient name and last updated timestamp from context
+8. **CRITICAL: Build clinical_reasoning nodes and connections** - Create a reasoning flow graph:
+   - Start with "input" nodes: Patient baseline data, chief complaints, medical history
+   - Add "evidence" nodes: Key symptoms, test results, risk factors, clinical findings
+   - Add "process" nodes: Differential diagnosis steps, analysis stages, decision points
+   - End with "output" nodes: Final diagnosis, treatment recommendations, follow-up plans
+   - Create "connections" between nodes showing the reasoning flow (from -> to)
+   - Use appropriate icons (emoji) for each node type
+   - Make the flow logical and traceable from input to diagnosis to outcome
+
+CLINICAL REASONING STRUCTURE:
+- nodes: Array of reasoning nodes, each with id, label, type, and icon
+- connections: Array of connections showing flow between nodes
+- Example node types:
+  * "input": Patient baseline, initial presentation (icons: 👤, 📋, 🏥)
+  * "evidence": Symptoms, test results, risk factors (icons: 💊, 🧪, ⚠️, 📊)
+  * "process": Analysis steps, differential diagnosis (icons: 🔍, 🧠, ⚖️)
+  * "output": Final diagnosis, treatment, outcomes (icons: 🎯, 💊, 📈)
+
+Return ONLY valid JSON matching the schema."""
+
+        # Escape curly braces in context_json
+        escaped_context_json = context_json.replace("{", "{{").replace("}", "}}")
+        escaped_med42_text = med42_text.replace("{", "{{").replace("}", "}}")
+        
+        # Create prompt template
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", human_prompt_template)
+        ])
+        
+        # Fill in variables using partial
+        prompt = prompt.partial(
+            med42_text=escaped_med42_text,
+            context_data=escaped_context_json
+        )
+        
+        # Invoke Gemini (without parser first to clean the response)
+        print(f"🤖 Processing with Gemini...")
+        chain = prompt | gemini_llm
+        
+        # Get raw response first
+        raw_response = chain.invoke({})
+        raw_text = raw_response.content if hasattr(raw_response, 'content') else str(raw_response)
+        
+        print(f"📝 Raw Gemini response (first 500 chars): {raw_text[:500]}")
+        
+        # Clean up the response - remove markdown code blocks if present
+        # Remove ```json and ``` markers
+        cleaned_text = re.sub(r'```json\s*', '', raw_text)
+        cleaned_text = re.sub(r'```\s*$', '', cleaned_text, flags=re.MULTILINE)
+        cleaned_text = cleaned_text.strip()
+        
+        # Fix double curly braces that Gemini might have output (from seeing escaped braces in prompt)
+        # Replace {{ with { and }} with } (but be careful - only do this if they appear as escaped JSON)
+        # Check if the text starts with {{ - if so, it's likely escaped JSON
+        if cleaned_text.startswith('{{'):
+            cleaned_text = cleaned_text.replace('{{', '{').replace('}}', '}')
+        
+        # Parse JSON manually
+        try:
+            result = json.loads(cleaned_text)
+        except json.JSONDecodeError as e:
+            print(f"❌ JSON parsing error: {e}")
+            print(f"Cleaned text (first 1000 chars): {cleaned_text[:1000]}")
+            # Try one more time with more aggressive cleaning
+            cleaned_text = cleaned_text.replace('{{', '{').replace('}}', '}')
+            try:
+                result = json.loads(cleaned_text)
+            except json.JSONDecodeError as e2:
+                print(f"❌ Second JSON parsing attempt also failed: {e2}")
+                raise
+        
+        print(f"✅ Converted to structured JSON")
+        print(f"📊 JSON keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
+        
+        return result
+        
+    except Exception as e:
+        print(f"❌ Error converting Med42 text to JSON: {e}")
         import traceback
         traceback.print_exc()
         raise
