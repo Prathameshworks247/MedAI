@@ -68,66 +68,66 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
     # The Pydantic parser will validate the output anyway
     system_message = """You are a clinical data extraction AI powered by Gemini.
 
-CRITICAL RULES:
-- Extract ONLY information that is explicitly present in the document
-- Do NOT invent, infer, or assume any values
-- If a field is not mentioned, use empty values (empty dict {{}}, empty list [], empty string "")
-- Return valid JSON that matches the exact schema described below
+    CRITICAL RULES:
+    - Extract ONLY information that is explicitly present in the document
+    - Do NOT invent, infer, or assume any values
+    - If a field is not mentioned, use empty values (empty dict {{}}, empty list [], empty string "")
+    - Return valid JSON that matches the exact schema described below
 
-EXTRACTION GUIDELINES:
+    EXTRACTION GUIDELINES:
 
-1. appointment_updates (dict):
-   - chief_complaint: Main reason for visit (string)
-   - diagnosis: Structured diagnosis object with codes, descriptions (dict)
-   - discussion_summary: Brief summary of consultation (string)
-   - status: Current appointment status (one of: scheduled, in_progress, paused, completed, cancelled)
+    1. appointment_updates (dict):
+    - chief_complaint: Main reason for visit (string)
+    - diagnosis: Structured diagnosis object with codes, descriptions (dict)
+    - discussion_summary: Brief summary of consultation (string)
+    - status: Current appointment status (one of: scheduled, in_progress, paused, completed, cancelled)
 
-2. reports (array of objects):
-   - Each report object must have: "file_name" (string) and "summary" (string)
-   - Example: [{{"file_name": "name.pdf", "summary": "brief description"}}]
-   - Only include if reports are mentioned in the document
+    2. reports (array of objects):
+    - Each report object must have: "file_name" (string) and "summary" (string)
+    - Example: [{{"file_name": "name.pdf", "summary": "brief description"}}]
+    - Only include if reports are mentioned in the document
 
-3. tests (array of test documents):
-   - CRITICAL: Group ALL tests from the SAME document into ONE test document object
-   - If only one PDF/document was uploaded, create ONLY ONE test document containing all tests
-   - Each test document must have: "doc_id" (string - use document ID if available, otherwise generate one), "doc_name" (string - name of the test report/document), "summary" (string - brief summary of all tests in this document), and "tests" (array)
-   - Each test in the "tests" array must have: "name" (string - test name) and "description" (string - MUST contain the actual test value with unit, e.g., "46.00 mg/dL", "1.00 mg/L", "4 ng/L", "<20 mg/dL")
-   - The description field MUST contain the numeric value and unit from the document - this is the actual test result
-   - If a test value is not found, use empty string "" (NEVER use null)
-   - Example for a single document with multiple tests: [{{"doc_id": "Z6152301", "doc_name": "HEART HEALTH SCREEN, ADVANCED", "summary": "Cardiac risk assessment panel", "tests": [{{"name": "Apo B (Apolipoprotein B)", "description": "46.00 mg/dL"}}, {{"name": "hsCRP (Cardio C-Reactive Protein), Serum", "description": "1.00 mg/L"}}, {{"name": "Troponin-I, Serum High Sensitive", "description": "4 ng/L"}}]}}]
-   - IMPORTANT: Extract the actual test values (numbers with units) and put them in the description field
-   - IMPORTANT: Group all tests from the same source document together - do NOT create separate documents for each test
+    3. tests (array of test documents):
+    - CRITICAL: Group ALL tests from the SAME document into ONE test document object
+    - If only one PDF/document was uploaded, create ONLY ONE test document containing all tests
+    - Each test document must have: "doc_id" (string - use document ID if available, otherwise generate one), "doc_name" (string - name of the test report/document), "summary" (string - brief summary of all tests in this document), and "tests" (array)
+    - Each test in the "tests" array must have: "name" (string - test name) and "description" (string - MUST contain the actual test value with unit, e.g., "46.00 mg/dL", "1.00 mg/L", "4 ng/L", "<20 mg/dL")
+    - The description field MUST contain the numeric value and unit from the document - this is the actual test result
+    - If a test value is not found, use empty string "" (NEVER use null)
+    - Example for a single document with multiple tests: [{{"doc_id": "Z6152301", "doc_name": "HEART HEALTH SCREEN, ADVANCED", "summary": "Cardiac risk assessment panel", "tests": [{{"name": "Apo B (Apolipoprotein B)", "description": "46.00 mg/dL"}}, {{"name": "hsCRP (Cardio C-Reactive Protein), Serum", "description": "1.00 mg/L"}}, {{"name": "Troponin-I, Serum High Sensitive", "description": "4 ng/L"}}]}}]
+    - IMPORTANT: Extract the actual test values (numbers with units) and put them in the description field
+    - IMPORTANT: Group all tests from the same source document together - do NOT create separate documents for each test
 
-4. patient_profile_updates (dict):
-   - medical_history: Array of ALL medical history items (list of strings)
-   - Include in this single array: allergies, diseases, conditions, past surgeries, chronic illnesses, medications, and any other medical history items found
-   - Format each item as a descriptive string, e.g., "Allergy: Penicillin", "Condition: Hypertension", "Medication: Aspirin 81mg daily", "Past Surgery: Appendectomy (2020)"
-   - Example: ["Allergy: Penicillin", "Condition: Hypertension", "Condition: Diabetes Type 2", "Medication: Metformin 500mg twice daily", "Past Surgery: Appendectomy (2020)"]
-   - IMPORTANT: Put ALL medical history information in this single array, not in separate fields
+    4. patient_profile_updates (dict):
+    - medical_history: Array of ALL medical history items (list of strings)
+    - Include in this single array: allergies, diseases, conditions, past surgeries, chronic illnesses, medications, and any other medical history items found
+    - Format each item as a descriptive string, e.g., "Allergy: Penicillin", "Condition: Hypertension", "Medication: Aspirin 81mg daily", "Past Surgery: Appendectomy (2020)"
+    - Example: ["Allergy: Penicillin", "Condition: Hypertension", "Condition: Diabetes Type 2", "Medication: Metformin 500mg twice daily", "Past Surgery: Appendectomy (2020)"]
+    - IMPORTANT: Put ALL medical history information in this single array, not in separate fields
 
-5. time_series_observations (array of objects):
-   - ONLY include if there are repeated measurements over time (vitals, lab trends, etc.)
-   - Each observation MUST have ALL of these fields: "metric" (string), "value" (number), "unit" (string), "timestamp" (ISO8601 string), "is_anamoly" (boolean)
-   - CRITICAL: "is_anamoly" is REQUIRED for every time_series_observation. It MUST be included as a boolean value (true or false).
-   - Allowed metric names: "blood_pressure", "heart_rate", "temperature", "glucose", "cholesterol", "hemoglobin", "wbc", "rbc", "platelets"
-   - "is_anamoly" should be true if the value is outside normal range, false otherwise
-   - Normal ranges: blood_pressure (90-140/60-90), heart_rate (60-100 bpm), temperature (36.1-37.2°C), glucose (70-100 mg/dL fasting), cholesterol (<200 mg/dL), hemoglobin (12-16 g/dL), wbc (4-11 x10^9/L), rbc (4.5-5.5 x10^12/L), platelets (150-450 x10^9/L)
-   - Example: [{{"metric": "blood_pressure", "value": 145.0, "unit": "mmHg", "timestamp": "2025-01-11T10:30:00", "is_anamoly": true}}, {{"metric": "heart_rate", "value": 72.0, "unit": "bpm", "timestamp": "2025-01-11T10:30:00", "is_anamoly": false}}]
-   - NOTE: Test results from lab reports should go in the "tests" array with values in "description", NOT in time_series_observations
-   - Only use time_series_observations for actual time-series data (multiple measurements over time)
+    5. time_series_observations (array of objects):
+    - ONLY include if there are repeated measurements over time (vitals, lab trends, etc.)
+    - Each observation MUST have ALL of these fields: "metric" (string), "value" (number), "unit" (string), "timestamp" (ISO8601 string), "is_anamoly" (boolean)
+    - CRITICAL: "is_anamoly" is REQUIRED for every time_series_observation. It MUST be included as a boolean value (true or false).
+    - Allowed metric names: "blood_pressure", "heart_rate", "temperature", "glucose", "cholesterol", "hemoglobin", "wbc", "rbc", "platelets"
+    - "is_anamoly" should be true if the value is outside normal range, false otherwise
+    - Normal ranges: blood_pressure (90-140/60-90), heart_rate (60-100 bpm), temperature (36.1-37.2°C), glucose (70-100 mg/dL fasting), cholesterol (<200 mg/dL), hemoglobin (12-16 g/dL), wbc (4-11 x10^9/L), rbc (4.5-5.5 x10^12/L), platelets (150-450 x10^9/L)
+    - Example: [{{"metric": "blood_pressure", "value": 145.0, "unit": "mmHg", "timestamp": "2025-01-11T10:30:00", "is_anamoly": true}}, {{"metric": "heart_rate", "value": 72.0, "unit": "bpm", "timestamp": "2025-01-11T10:30:00", "is_anamoly": false}}]
+    - NOTE: Test results from lab reports should go in the "tests" array with values in "description", NOT in time_series_observations
+    - Only use time_series_observations for actual time-series data (multiple measurements over time)
 
-OUTPUT FORMAT:
-Return a valid JSON object with these exact keys: appointment_updates, reports, tests, patient_profile_updates, time_series_observations.
-Return ONLY the JSON object, no additional text or markdown formatting."""
-    
+    OUTPUT FORMAT:
+    Return a valid JSON object with these exact keys: appointment_updates, reports, tests, patient_profile_updates, time_series_observations.
+    Return ONLY the JSON object, no additional text or markdown formatting."""
+        
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_message),
         ("human", """
-Document content:
-{document_text}
+    Document content:
+    {document_text}
 
-Extract structured medical data following the schema exactly.
-""")
+    Extract structured medical data following the schema exactly.
+    """)
     ])
     
     # Create chain without parser first to see raw output
@@ -334,15 +334,7 @@ async def _save_to_mongo_impl(
         Success message
     """
     try:
-        # Convert string IDs to ObjectId (handle custom formats like "ObjectId-number")
-        try:
-            # Try to extract ObjectId from custom format (e.g., "507f1f77bcf86cd799439011-0")
-            if "-" in patient_id:
-                patient_object_id = ObjectId(patient_id.split("-")[0])
-            else:
-                patient_object_id = ObjectId(patient_id)
-        except:
-            patient_object_id = patient_id
+        patient_object_id = patient_id
             
         # Appointment ID can be in custom format "ObjectId-number", use as-is for queries
         # MongoDB will match the exact string if it's stored as a string

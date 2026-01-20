@@ -6,6 +6,238 @@ import { apiRequest } from '../../utils/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
+const RequiredActivities = ({ session }) => (
+  <div className="card mb-6">
+    <h3 className="text-lg font-bold text-gray-900 mb-4">Required Activities</h3>
+    <div className="grid grid-cols-3 gap-4">
+      <div className={`p-4 rounded-lg border-2 ${session?.requiredCompleted?.recording ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
+        <div className="flex items-center space-x-2 mb-2">
+          {session?.requiredCompleted?.recording ? (
+            <CheckCircle className="w-5 h-5 text-green-600" />
+          ) : (
+            <Mic className="w-5 h-5 text-gray-400" />
+          )}
+          <span className="font-semibold text-gray-900">Recording</span>
+        </div>
+        <p className="text-xs text-gray-600">Consultation audio & transcription</p>
+      </div>
+
+      <div className={`p-4 rounded-lg border-2 ${session?.requiredCompleted?.documents ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
+        <div className="flex items-center space-x-2 mb-2">
+          {session?.requiredCompleted?.documents ? (
+            <CheckCircle className="w-5 h-5 text-green-600" />
+          ) : (
+            <FileCheck className="w-5 h-5 text-gray-400" />
+          )}
+          <span className="font-semibold text-gray-900">Documents</span>
+        </div>
+        <p className="text-xs text-gray-600">Handwritten clinical notes</p>
+      </div>
+
+      <div className={`p-4 rounded-lg border-2 ${session?.requiredCompleted?.report ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
+        <div className="flex items-center space-x-2 mb-2">
+          {session?.requiredCompleted?.report ? (
+            <CheckCircle className="w-5 h-5 text-green-600" />
+          ) : (
+            <FileText className="w-5 h-5 text-gray-400" />
+          )}
+          <span className="font-semibold text-gray-900">Clinical Report</span>
+        </div>
+        <p className="text-xs text-gray-600">AI-generated SOAP report</p>
+      </div>
+    </div>
+  </div>
+);
+
+const RecordingSection = ({ 
+  isRecording, 
+  isReviewing, 
+  isFinalized, 
+  transcription, 
+  partialTranscript, 
+  isConnected, 
+  recordingDuration, 
+  onStart, 
+  onStop, 
+  onRedo, 
+  onFinalize, 
+  formatDuration, 
+  appointmentId 
+}) => {
+  return (
+    <div className="mb-6">
+       {/* Live Transcription Display */}
+       <div className="card mb-4 bg-blue-50 border-2 border-blue-300">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center">
+              <Mic className={`w-5 h-5 mr-2 text-blue-600 ${isRecording ? 'animate-pulse' : ''}`} />
+              {isRecording ? 'Discussion Details' : 'Discussion Details'}
+            </h3>
+            <div className="flex items-center space-x-2">
+              {isRecording && (
+                <>
+                  <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <span className="text-sm text-gray-600">
+                    {isConnected ? 'Connected' : 'Connecting...'}
+                  </span>
+                </>
+              )}
+              {transcription && !isRecording && (
+                <button 
+                  onClick={() => {
+                    const blob = new Blob([transcription], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `transcription-${appointmentId}-${Date.now()}.txt`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="text-primary-600 hover:text-primary-700 text-sm flex items-center"
+                >
+                  <Download className="w-4 h-4 mr-1" />
+                  Export
+              </button>
+            )}
+          </div>
+          </div>
+          
+          <div className="bg-white border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
+            <div className="space-y-2">
+              {transcription && (
+                <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                  {transcription}
+                </p>
+              )}
+              {partialTranscript && (
+                <p className="text-sm text-gray-500 italic whitespace-pre-wrap leading-relaxed">
+                  {partialTranscript}
+                  {isRecording && (
+                    <span className="inline-block w-2 h-4 bg-blue-500 ml-1 animate-pulse"></span>
+                  )}
+                </p>
+              )}
+              {!transcription && !partialTranscript && isRecording && (
+                <p className="text-sm text-gray-400 italic">Waiting for audio transcription...</p>
+              )}
+               {!transcription && !partialTranscript && !isRecording && (
+                <p className="text-sm text-gray-400 italic text-center py-4">No transcription available. Start recording to generate one.</p>
+              )}
+            </div>
+      </div>
+          
+          {isRecording && (
+            <div className="mt-3 flex items-center justify-between text-sm text-gray-600">
+              <span>Duration: {formatDuration(recordingDuration)}</span>
+              <span>Status: Recording</span>
+            </div>
+          )}
+        </div>
+
+      {/* Recording Controls */}
+      {!isFinalized && (
+        <div className="mt-4">
+          {!isRecording && !isReviewing ? (
+            <button 
+              onClick={onStart}
+              className="btn-primary flex items-center justify-center w-full"
+            >
+                <Mic className="w-4 h-4 mr-2" />
+              Start Recording
+            </button>
+          ) : isRecording ? (
+            <button 
+              onClick={onStop}
+              className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center w-full"
+            >
+              <Square className="w-4 h-4 mr-2" />
+              Stop Recording ({formatDuration(recordingDuration)})
+              </button>
+          ) : (
+             <div className="flex space-x-2">
+                 <button 
+                  onClick={onRedo}
+                  className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center flex-1"
+                >
+                  <span className="mr-2">↺</span>
+                  Redo Recording
+                </button>
+                <button 
+                  onClick={onFinalize}
+                  className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center flex-1"
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Finalize Recording
+                </button>
+             </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const UploadSection = ({ title, icon: Icon, colorClass, borderClass, accept, onUpload, uploading, uploadedFiles }) => {
+  const id = `upload-${title.toLowerCase().replace(/\s+/g, '-')}`;
+  return (
+    <div className={`card ${colorClass} border-2 ${borderClass}`}>
+      <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center">
+        <Icon className={`w-5 h-5 mr-2 ${borderClass.replace('border-', 'text-').replace('300', '600')}`} />
+          {title}
+      </h3>
+       <p className="text-xs text-gray-600 mb-3">
+        Upload {title.toLowerCase()} files.
+      </p>
+      <input
+          type="file"
+          id={id}
+          multiple
+          accept={accept}
+          onChange={onUpload}
+          className="hidden"
+          disabled={uploading}
+      />
+      <label
+          htmlFor={id}
+          className={`btn-secondary w-full flex items-center justify-center cursor-pointer ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+      >
+          {uploading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+          Upload {title}
+      </label>
+       {uploadedFiles && uploadedFiles.length > 0 && (
+        <div className="mt-4">
+             <h4 className="text-sm font-semibold text-gray-700 mb-2">Uploaded Files:</h4>
+             <div className="space-y-2">
+               {uploadedFiles.map((file, idx) => (
+                 <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-2">
+                   <div className="flex items-center space-x-2 overflow-hidden">
+                     <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                     <span className="text-sm text-gray-700 truncate" title={file.file_name || file.name || file.doc_name}>
+                        {file.file_name || file.name || file.doc_name}
+                     </span>
+                   </div>
+                   {file.uri ? (
+                     <a 
+                       href={file.uri} 
+                       target="_blank" 
+                       rel="noopener noreferrer"
+                       className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded"
+                       title="View Document"
+                     >
+                       <Eye className="w-4 h-4" />
+                     </a>
+                   ) : (
+                     <CheckCircle className="w-4 h-4 text-green-600" />
+                   )}
+                 </div>
+               ))}
+             </div>
+        </div>
+       )}
+    </div>
+  );
+};
+
 const ActiveSession = () => {
   const { appointmentId } = useParams();
   const navigate = useNavigate();
@@ -26,8 +258,11 @@ const ActiveSession = () => {
   
   // Workflow state: transcript -> documents -> chat
   const [transcriptRecorded, setTranscriptRecorded] = useState(false);
+  const [isReviewing, setIsReviewing] = useState(false);
   const [documentsUploaded, setDocumentsUploaded] = useState(false);
-  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [uploadedReports, setUploadedReports] = useState([]);
+  const [uploadedTests, setUploadedTests] = useState([]);
+  const [uploadedFiles, setUploadedFiles] = useState([]); // Keep for backward compatibility or general files
   const [uploading, setUploading] = useState(false);
   
   // Chat state
@@ -330,27 +565,84 @@ const ActiveSession = () => {
       setIsRecording(false);
       isRecordingRef.current = false; // Clear ref to stop segment restarts
   
-      // Wait for final segment to be sent, then close WebSocket
-      setTimeout(() => {
-        if (websocketRef.current) {
-          console.log('Closing WebSocket connection');
-          websocketRef.current.close();
-          websocketRef.current = null;
-        }
-        setIsConnected(false);
-      }, 1000);
+      setIsRecording(false);
+      isRecordingRef.current = false; // Clear ref to stop segment restarts
   
-      console.log('✓ Recording stopped');
+      // Do NOT close WebSocket here. Enter review mode.
+      setIsReviewing(true);
+  
+      console.log('✓ Recording stopped, entering review mode');
       // Mark transcript as recorded when recording stops (transcript will be saved to DB)
-      setTranscriptRecorded(true);
+      // setTranscriptRecorded(true); // Moved to finalize
 
     } catch (error) {
       console.error('Error stopping recording:', error);
     }
   };
 
+  const handleFinalizeRecording = () => {
+     // Close WebSocket
+     if (websocketRef.current) {
+        console.log('Closing WebSocket connection');
+        websocketRef.current.close();
+        websocketRef.current = null;
+      }
+      setIsConnected(false);
+      setIsReviewing(false);
+      setTranscriptRecorded(true);
+      
+      // Update appointment locally to reflect completion
+      setAppointment(prev => {
+          if (!prev) return prev;
+          return {
+              ...prev,
+              session: {
+                  ...prev.session,
+                  requiredCompleted: {
+                      ...prev.session.requiredCompleted,
+                      recording: true
+                  }
+              }
+          };
+      });
+  };
+
+  const handleRedoRecording = async () => {
+      // 1. Close current WebSocket
+      if (websocketRef.current) {
+          websocketRef.current.close();
+          websocketRef.current = null;
+      }
+      setIsConnected(false);
+      
+      // 2. Clear local transcription state
+      setTranscription('');
+      setPartialTranscript('');
+      
+      // 3. Clear transcription in DB
+      try {
+          // We assume passing empty discussion clears it. 
+          // Note: The backend update_appointment uses exclude_unset=True for Pydantic models.
+          // We need to ensure sending an empty string works. 
+          // If the backend model is Optional[str], passing "" should update it to "".
+           await apiRequest(`/appointments/${appointmentId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ discussion: "" })
+          });
+      } catch (err) {
+          console.error("Failed to clear discussion in DB", err);
+      }
+      
+      // 4. Reset states and start recording
+      setIsReviewing(false);
+      setTranscriptRecorded(false);
+      
+      // 5. Start recording again
+      handleStartRecording();
+  };
+
   // Handle document upload
-  const handleDocumentUpload = async (e) => {
+  const handleFileUpload = async (e, type) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
@@ -369,7 +661,6 @@ const ActiveSession = () => {
         formData.append('file', file);
         
         // For file uploads, we need to manually construct the request
-        // because apiRequest sets Content-Type: application/json by default
         const token = localStorage.getItem('access_token');
         const url = `${API_BASE_URL}/ingest/document/${appointmentId}?patient_id=${patientId}`;
         
@@ -377,7 +668,6 @@ const ActiveSession = () => {
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
-        // Don't set Content-Type - let browser set it with boundary for FormData
         
         const response = await fetch(url, {
           method: 'POST',
@@ -408,10 +698,18 @@ const ActiveSession = () => {
       });
 
       const results = await Promise.all(uploadPromises);
-      setUploadedFiles(prev => [...prev, ...results]);
+      
+      if (type === 'report') {
+          setUploadedReports(prev => [...prev, ...results]);
+      } else if (type === 'test') {
+          setUploadedTests(prev => [...prev, ...results]);
+      } else {
+          setUploadedFiles(prev => [...prev, ...results]);
+      }
+      
       setDocumentsUploaded(true);
       
-      // Refresh appointment data to get updated reports/tests
+      // Refresh appointment data
       const refreshResponse = await apiRequest(`/appointments/${appointmentId}`);
       if (refreshResponse.success) {
         setAppointment(prev => {
@@ -425,9 +723,13 @@ const ActiveSession = () => {
             }
           };
         });
+        
+        // Clear local uploaded states so UI uses the reliable DB data (with URIs) from session.reports/tests
+        if (type === 'report') setUploadedReports([]);
+        if (type === 'test') setUploadedTests([]);
       }
       
-      alert(`Successfully uploaded ${results.length} file(s)`);
+      alert(`Successfully uploaded ${results.length} ${type}(s)`);
     } catch (error) {
       console.error('Error uploading documents:', error);
       alert(`Error uploading documents: ${error.message}`);
@@ -693,224 +995,12 @@ const ActiveSession = () => {
   const session = appointment.session;
   const activities = session?.activities || [];
   
+  // Check if finalized based on discussion length
+  const isFinalized = (session?.discussion_summary && session.discussion_summary.length > 0)
+  console.log(session?.discussion_summary);
+
   // Use local Logic or Helper.
   const requiredComplete = session?.requiredCompleted?.recording && session?.requiredCompleted?.documents && session?.requiredCompleted?.report;
-
-  const getActivityColor = (type) => {
-    const colors = {
-      [ACTIVITY_TYPES.RECORDING]: 'bg-blue-50 border-blue-200',
-      [ACTIVITY_TYPES.DOCUMENTS]: 'bg-purple-50 border-purple-200',
-      [ACTIVITY_TYPES.REPORT]: 'bg-green-50 border-green-200',
-      [ACTIVITY_TYPES.TESTS]: 'bg-orange-50 border-orange-200',
-      [ACTIVITY_TYPES.DIAGNOSIS]: 'bg-red-50 border-red-200',
-      [ACTIVITY_TYPES.ADDITIONAL_DOCS]: 'bg-gray-50 border-gray-200'
-    };
-    return colors[type] || 'bg-gray-50 border-gray-200';
-  };
-
-  const getActivityIcon = (type) => {
-     // I will use explicit icons here as I don't want to import from data file if not needed or I can import it
-     // But previous code imported it. Let's keep it imported.
-     // Wait, the imported getActivityIcon function might return JSX.
-     // Let's assume it works as before.
-     // If not, I'll use a switch case.
-     // The error log didn't complain about getActivityIcon.
-     return type === ACTIVITY_TYPES.RECORDING ? <Mic /> : 
-            type === ACTIVITY_TYPES.DOCUMENTS ? <FileCheck /> :
-            type === ACTIVITY_TYPES.REPORT ? <FileText /> :
-            type === ACTIVITY_TYPES.TESTS ? <TestTube2 /> :
-            type === ACTIVITY_TYPES.DIAGNOSIS ? <Brain /> : <Plus />;
-  };
-
-  const ActivityTimeline = ({ activity }) => {
-    const isExpanded = expandedActivity === activity.id;
-    
-    // Use imported function or fallback
-    const icon = activity.type === ACTIVITY_TYPES.RECORDING ? <Mic /> : 
-                 activity.type === ACTIVITY_TYPES.DOCUMENTS ? <FileCheck /> :
-                 activity.type === ACTIVITY_TYPES.REPORT ? <FileText /> :
-                 activity.type === ACTIVITY_TYPES.TESTS ? <TestTube2 /> :
-                 activity.type === ACTIVITY_TYPES.DIAGNOSIS ? <Brain /> : <Plus />;
-    
-    return (
-      <div className={`card border-2 ${getActivityColor(activity.type)}`}>
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-start space-x-3 flex-1">
-            <div className="text-3xl">{icon}</div> 
-            <div className="flex-1">
-              <h4 className="text-lg font-bold text-gray-900">{activity.title}</h4>
-              <p className="text-sm text-gray-600 flex items-center">
-                <Clock className="w-3 h-3 mr-1" />
-                {activity.timestamp}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-2">
-            <CheckCircle className="w-5 h-5 text-green-600" />
-            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-semibold">
-              COMPLETED
-            </span>
-          </div>
-        </div>
-
-        {/* Activity Content Preview */}
-        <div className="bg-white rounded-lg p-3 mb-3">
-          {activity.type === ACTIVITY_TYPES.RECORDING && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-gray-700">Duration: {activity.data.duration}</span>
-                <button className="text-primary-600 hover:text-primary-700 text-sm font-semibold">
-                  <Play className="w-4 h-4 inline mr-1" />
-                  Play Audio
-                </button>
-              </div>
-              {activity.data.transcription && (
-                <p className="text-xs text-gray-600">Transcription available ({activity.data.transcription.length} characters)</p>
-              )}
-            </div>
-          )}
-
-          {activity.type === ACTIVITY_TYPES.DOCUMENTS && (
-            <div className="space-y-2">
-              <p className="text-sm font-semibold text-gray-700">{activity.data.files?.length || 0} file(s) uploaded</p>
-              <div className="flex flex-wrap gap-2">
-                {activity.data.files?.map((file, idx) => (
-                  <span key={idx} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
-                    {file.name}
-                  </span>
-                ))}
-              </div>
-              {activity.data.ocrExtracted && (
-                <p className="text-xs text-gray-600">OCR text extracted</p>
-              )}
-            </div>
-          )}
-
-          {activity.type === ACTIVITY_TYPES.REPORT && (
-            <div className="space-y-2">
-              <p className="text-sm font-semibold text-gray-700">Clinical report generated</p>
-              <p className="text-xs text-gray-600">{activity.data.content?.length || 0} characters</p>
-            </div>
-          )}
-
-          {activity.type === ACTIVITY_TYPES.TESTS && (
-            <div className="space-y-2">
-              <p className="text-sm font-semibold text-gray-700">{activity.data.files?.length || 0} test file(s) uploaded</p>
-              {activity.data.extractedValues && (
-                <div className="grid grid-cols-4 gap-2">
-                  {Object.entries(activity.data.extractedValues).slice(0, 4).map(([key, value]) => (
-                    <div key={key} className="bg-white border border-gray-200 rounded p-2">
-                      <p className="text-xs text-gray-600">{key}</p>
-                      <p className="text-sm font-bold text-gray-900">{value}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {activity.type === ACTIVITY_TYPES.DIAGNOSIS && (
-            <div className="space-y-2">
-              <p className="text-sm font-semibold text-gray-900">{activity.data.diagnosis}</p>
-              <div className="flex items-center space-x-2">
-                <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                  activity.data.riskLevel === 'HIGH' ? 'bg-red-100 text-red-700' :
-                  activity.data.riskLevel === 'MODERATE' ? 'bg-yellow-100 text-yellow-700' :
-                  'bg-green-100 text-green-700'
-                }`}>
-                  Risk: {activity.data.riskLevel}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* View Details Button */}
-        <button
-          onClick={() => setExpandedActivity(isExpanded ? null : activity.id)}
-          className="btn-secondary w-full flex items-center justify-center"
-        >
-          <Eye className="w-4 h-4 mr-2" />
-          {isExpanded ? 'Hide Details' : 'View Full Details'}
-        </button>
-
-        {/* Expanded Content */}
-        {isExpanded && (
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            {activity.type === ACTIVITY_TYPES.RECORDING && activity.data.transcription && (
-              <div className="bg-white border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
-                <div className="flex items-center justify-between mb-3">
-                  <h5 className="font-semibold text-gray-900">Full Transcription</h5>
-                  <button className="text-primary-600 hover:text-primary-700 text-sm flex items-center">
-                    <Download className="w-4 h-4 mr-1" />
-                    Export
-                  </button>
-                </div>
-                <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans leading-relaxed">
-                  {activity.data.transcription}
-                </pre>
-              </div>
-            )}
-
-            {activity.type === ACTIVITY_TYPES.REPORT && activity.data.content && (
-              <div className="bg-white border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
-                <div className="flex items-center justify-between mb-3">
-                  <h5 className="font-semibold text-gray-900">Clinical Report</h5>
-                  <button className="text-primary-600 hover:text-primary-700 text-sm flex items-center">
-                    <Download className="w-4 h-4 mr-1" />
-                    Download PDF
-                  </button>
-                </div>
-                <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans leading-relaxed">
-                  {activity.data.content}
-                </pre>
-              </div>
-            )}
-
-            {activity.type === ACTIVITY_TYPES.DIAGNOSIS && (
-              <div className="space-y-4">
-                {activity.data.findings && activity.data.findings.length > 0 && (
-                  <div className="bg-white border border-gray-200 rounded-lg p-4">
-                    <h5 className="font-semibold text-gray-900 mb-2">Key Findings</h5>
-                    <ul className="space-y-1">
-                      {activity.data.findings.map((finding, idx) => (
-                        <li key={idx} className="text-sm text-gray-700">• {finding}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                
-                {activity.data.recommendations && activity.data.recommendations.length > 0 && (
-                  <div className="bg-white border border-gray-200 rounded-lg p-4">
-                    <h5 className="font-semibold text-gray-900 mb-2">Recommendations</h5>
-                    <ul className="space-y-1">
-                      {activity.data.recommendations.map((rec, idx) => (
-                        <li key={idx} className="text-sm text-gray-700">{idx + 1}. {rec}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {activity.data.comparisonData && (
-                  <div className="bg-white border border-gray-200 rounded-lg p-4">
-                    <h5 className="font-semibold text-gray-900 mb-2">Comparison with Previous Visit</h5>
-                    <p className="text-sm text-gray-600 mb-2">Previous visit: {activity.data.comparisonData.prevVisit}</p>
-                    <div className="space-y-1">
-                      {Object.entries(activity.data.comparisonData.changes).map(([key, value]) => (
-                        <p key={key} className="text-sm text-gray-700">
-                          <span className="font-semibold">{key}:</span> {value}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
 
   const appointmentNo = appointment.id.split("-")[1];
 
@@ -1113,128 +1203,52 @@ const ActiveSession = () => {
         </div>
       </div>
 
-      {/* Required Activities Status */}
-      <div className="card mb-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-4">Required Activities</h3>
-        <div className="grid grid-cols-3 gap-4">
-          <div className={`p-4 rounded-lg border-2 ${session?.requiredCompleted?.recording ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
-            <div className="flex items-center space-x-2 mb-2">
-              {session?.requiredCompleted?.recording ? (
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              ) : (
-                <Mic className="w-5 h-5 text-gray-400" />
-              )}
-              <span className="font-semibold text-gray-900">Recording</span>
-            </div>
-            <p className="text-xs text-gray-600">Consultation audio & transcription</p>
-          </div>
+      <RequiredActivities session={session} />
 
-          <div className={`p-4 rounded-lg border-2 ${session?.requiredCompleted?.documents ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
-            <div className="flex items-center space-x-2 mb-2">
-              {session?.requiredCompleted?.documents ? (
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              ) : (
-                <FileCheck className="w-5 h-5 text-gray-400" />
-              )}
-              <span className="font-semibold text-gray-900">Documents</span>
-            </div>
-            <p className="text-xs text-gray-600">Handwritten clinical notes</p>
-          </div>
+      <RecordingSection 
+        isRecording={isRecording}
+        isReviewing={isReviewing}
+        isFinalized={isFinalized}
+        transcription={transcription}
+        partialTranscript={partialTranscript}
+        isConnected={isConnected}
+        recordingDuration={recordingDuration}
+        onStart={handleStartRecording}
+        onStop={handleStopRecording}
+        onRedo={handleRedoRecording}
+        onFinalize={handleFinalizeRecording}
+        formatDuration={formatDuration}
+        appointmentId={appointmentId}
+      />
 
-          <div className={`p-4 rounded-lg border-2 ${session?.requiredCompleted?.report ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
-            <div className="flex items-center space-x-2 mb-2">
-              {session?.requiredCompleted?.report ? (
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              ) : (
-                <FileText className="w-5 h-5 text-gray-400" />
-              )}
-              <span className="font-semibold text-gray-900">Clinical Report</span>
-            </div>
-            <p className="text-xs text-gray-600">AI-generated SOAP report</p>
-          </div>
-        </div>
+      {isFinalized && (
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+             <UploadSection 
+                title="Reports" 
+                icon={FileText} 
+                colorClass="bg-purple-50" 
+                borderClass="border-purple-300"
+                accept=".pdf,.doc,.docx,.txt"
+                onUpload={(e) => handleFileUpload(e, 'report')}
+                uploading={uploading}
+                uploadedFiles={uploadedReports.length > 0 ? uploadedReports : session.reports} 
+             />
 
-        {/* Recording Controls - Always visible */}
-        <div className="mt-4">
-          {!isRecording ? (
-            <button 
-              onClick={handleStartRecording}
-              className="btn-primary flex items-center justify-center w-full"
-            >
-                <Mic className="w-4 h-4 mr-2" />
-              {session?.requiredCompleted?.recording ? 'Start New Recording' : 'Start Recording'}
-            </button>
-          ) : (
-            <button 
-              onClick={handleStopRecording}
-              className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center w-full"
-            >
-              <Square className="w-4 h-4 mr-2" />
-              Stop Recording ({formatDuration(recordingDuration)})
-              </button>
-            )}
-        </div>
-
-        {/* Document Upload Section - Show after transcript is recorded */}
-        {transcriptRecorded && !documentsUploaded && (
-          <div className="mt-4 card bg-purple-50 border-2 border-purple-300">
-            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-              <Upload className="w-5 h-5 mr-2 text-purple-600" />
-                Upload Documents
-            </h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Upload medical documents, test results, or reports for this appointment.
-            </p>
-            
-            <div className="mb-4">
-              <input
-                type="file"
-                id="document-upload"
-                multiple
+             <UploadSection 
+                title="Tests & Labs" 
+                icon={TestTube2} 
+                colorClass="bg-orange-50" 
+                borderClass="border-orange-300"
                 accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
-                onChange={handleDocumentUpload}
-                className="hidden"
-                disabled={uploading}
-              />
-              <label
-                htmlFor="document-upload"
-                className={`btn-primary flex items-center justify-center cursor-pointer ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {uploading ? (
-                  <>
-                    <Loader className="w-4 h-4 mr-2 animate-spin" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Select Files to Upload
-                  </>
-                )}
-              </label>
-            </div>
-            
-            {uploadedFiles.length > 0 && (
-              <div className="mt-4">
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Uploaded Files:</h4>
-                <div className="space-y-2">
-                  {uploadedFiles.map((file, idx) => (
-                    <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-2">
-                      <div className="flex items-center space-x-2">
-                        <FileText className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm text-gray-700">{file.name}</span>
-                      </div>
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+                onUpload={(e) => handleFileUpload(e, 'test')}
+                uploading={uploading}
+                uploadedFiles={uploadedTests.length > 0 ? uploadedTests : session.tests}
+             />
+        </div>
+      )}
         
-        {/* Chat Section - Show after documents are uploaded */}
-        {transcriptRecorded && documentsUploaded && (
+      {/* Chat Section - Show after documents are uploaded */}
+        {isFinalized && documentsUploaded && (
           <div className="mt-6 card bg-blue-50 border-2 border-blue-300">
             <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
               <MessageSquare className="w-5 h-5 mr-2 text-blue-600" />
@@ -1312,95 +1326,11 @@ const ActiveSession = () => {
             </form>
           </div>
         )}
-      </div>
 
-      {/* Live Transcription Display - Show when recording or has transcription */}
-      {(isRecording || transcription || partialTranscript) && (
-        <div className="card mb-6 bg-blue-50 border-2 border-blue-300">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-gray-900 flex items-center">
-              <Mic className={`w-5 h-5 mr-2 text-blue-600 ${isRecording ? 'animate-pulse' : ''}`} />
-              {isRecording ? 'Live Transcription' : 'Transcription'}
-            </h3>
-            <div className="flex items-center space-x-2">
-              {isRecording && (
-                <>
-                  <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                  <span className="text-sm text-gray-600">
-                    {isConnected ? 'Connected' : 'Connecting...'}
-                  </span>
-                </>
-              )}
-              {transcription && !isRecording && (
-                <button 
-                  onClick={() => {
-                    const blob = new Blob([transcription], { type: 'text/plain' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `transcription-${appointmentId}-${Date.now()}.txt`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  className="text-primary-600 hover:text-primary-700 text-sm flex items-center"
-                >
-                  <Download className="w-4 h-4 mr-1" />
-                  Export
-              </button>
-            )}
-          </div>
-          </div>
-          
-          <div className="bg-white border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
-            <div className="space-y-2">
-              {transcription && (
-                <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                  {transcription}
-                </p>
-              )}
-              {partialTranscript && (
-                <p className="text-sm text-gray-500 italic whitespace-pre-wrap leading-relaxed">
-                  {partialTranscript}
-                  {isRecording && (
-                    <span className="inline-block w-2 h-4 bg-blue-500 ml-1 animate-pulse"></span>
-                  )}
-                </p>
-              )}
-              {!transcription && !partialTranscript && isRecording && (
-                <p className="text-sm text-gray-400 italic">Waiting for audio transcription...</p>
-              )}
-            </div>
-      </div>
-          
-          {isRecording && (
-            <div className="mt-3 flex items-center justify-between text-sm text-gray-600">
-              <span>Duration: {formatDuration(recordingDuration)}</span>
-              <span>Status: Recording</span>
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* Activity Timeline */}
-      {activities.length > 0 && (
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-gray-900">Session Timeline</h3>
-            <span className="text-sm text-gray-600">{activities.length} activities completed</span>
-          </div>
-          
-          <div className="space-y-4">
-            {activities.map((activity, index) => (
-              <div key={activity.id} className="relative">
-                {index < activities.length - 1 && (
-                  <div className="absolute left-6 top-16 bottom-0 w-0.5 bg-gray-200 z-0"></div>
-                )}
-                <ActivityTimeline activity={activity} />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+
+
+
 
       {/* Additional Actions - Only show after required activities */}
       {requiredComplete && (

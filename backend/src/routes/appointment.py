@@ -506,7 +506,7 @@ async def live_detection(websocket: WebSocket):
                             extraction_result = await process_medical_document(
                                 document_text=final_text,
                                 patient_id=patient_id,
-                                appointment_id=appointment_id,
+                                appointment_id=appointment_id or "",
                                 file_path=None  # No PDF, just text
                             )
                             
