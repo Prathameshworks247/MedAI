@@ -499,6 +499,54 @@ const ActiveSession = () => {
     }
   };
 
+  const handlePauseSession = async () => {
+    if (isRecording) {
+      await handleStopRecording();
+    }
+    
+    try {
+      const response = await apiRequest(`/appointments/${appointmentId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'paused' })
+      });
+      
+      if (response.success) {
+        navigate('/doctor');
+      } else {
+        console.error('Failed to pause session:', response.error);
+        alert('Failed to pause session. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error pausing session:', error);
+      alert('An error occurred while pausing the session.');
+    }
+  };
+
+  const handleEndSession = async () => {
+    if (confirm('Are you sure you want to end this session? This will mark the appointment as completed.')) {
+      if (isRecording) {
+        await handleStopRecording();
+      }
+      
+      try {
+        const response = await apiRequest(`/appointments/${appointmentId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'completed' })
+        });
+        
+        if (response.success) {
+          navigate('/doctor');
+        } else {
+          console.error('Failed to end session:', response.error);
+          alert('Failed to end session. Please try again.');
+        }
+      } catch (error) {
+        console.error('Error ending session:', error);
+        alert('An error occurred while ending the session.');
+      }
+    }
+  };
+
   useEffect(() => {
     const fetchAppointment = async () => {
       try {
@@ -1424,19 +1472,21 @@ const ActiveSession = () => {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-gray-600">Session Status</p>
-            <p className="text-lg font-semibold text-gray-900">{appointment.status}</p>
+            <p className="text-lg font-semibold text-gray-900 capitalize">{appointment.status.split('_').join(' ')}</p>
           </div>
           <div className="flex space-x-3">
-            <button className="btn-secondary flex items-center">
+            <button 
+              onClick={handlePauseSession}
+              className="btn-secondary flex items-center"
+            >
               Pause Session
             </button>
             <button 
-              onClick={handleStopRecording}
-              disabled={!isRecording}
-              className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleEndSession}
+              className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors flex items-center"
             >
-              <Square className="w-4 h-4 mr-2" />
-              {isRecording ? 'Stop Recording' : 'End Session'}
+              <CheckCircle className="w-4 h-4 mr-2" />
+              End Session
             </button>
           </div>
         </div>
