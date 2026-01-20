@@ -40,6 +40,7 @@ class AppointmentModel(BaseModel):
     created_at: datetime = Field(default=datetime.now())
     updated_at: datetime = Field(default=datetime.now())
 
+
 class UpdateAppointmentModel(BaseModel):
     patient_id: str | None = None
     doctor_id: str | None = None
@@ -54,3 +55,30 @@ class UpdateAppointmentModel(BaseModel):
     tests: List[TestModel] | None = None
     generated_diagnosis: dict | None = None
     doctor_diagnosis: dict | None = None
+
+
+# Diagnosis Models
+class DiagnosisItem(BaseModel):
+    """Individual diagnosis with confidence score"""
+    diagnosis_code: str = Field(..., description="ICD-10 or diagnosis code")
+    diagnosis_name: str = Field(..., description="Name of the diagnosis")
+    summary: str = Field(..., description="Brief summary of the diagnosis")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score 0-1")
+
+
+class PrimaryDiagnosis(BaseModel):
+    """Primary diagnosis (highest confidence) with detailed reasoning"""
+    diagnosis_code: str = Field(..., description="ICD-10 or diagnosis code")
+    diagnosis_name: str = Field(..., description="Name of the diagnosis")
+    summary: str = Field(..., description="Brief summary of the diagnosis")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score 0-1")
+    diagnosis_summary: str = Field(..., description="Comprehensive diagnosis summary")
+    reasoning_chain: str = Field(..., description="Detailed reasoning chain explaining the diagnosis")
+    risk_factors: List[str] = Field(..., description="List of risk factors involved")
+
+
+class DiagnosisResponse(BaseModel):
+    """Response containing 5 diagnoses"""
+    primary_diagnosis: PrimaryDiagnosis = Field(..., description="Primary diagnosis with full details")
+    alternative_diagnoses: List[DiagnosisItem] = Field(..., description="Other 4 diagnoses with summaries")
+    generated_at: datetime = Field(default_factory=datetime.now)

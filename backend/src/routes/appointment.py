@@ -3,12 +3,14 @@ from bson import ObjectId
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from src.models.appointment import AppointmentModel, UpdateAppointmentModel
+from src.models.appointment import AppointmentModel, UpdateAppointmentModel, DiagnosisResponse, PrimaryDiagnosis, DiagnosisItem
 from src.middlewares.auth import check_doctor_exists
 from src.db import appointment_collection, user_collection
 from src.services.streaming_stt import StreamingTranscriber
 from src.services.whisper_service import transcribe_audio_file
 from src.services.agent import process_medical_document
+from src.services.diagnosis_generator import generate_diagnosis
+from src.services.chatbot_context import verify_doctor_patient_access
 
 router = APIRouter()
 
@@ -498,11 +500,12 @@ async def live_detection(websocket: WebSocket):
                     try:
                         # Get appointment to extract patient_id
                         appointment = await appointment_collection.find_one({"_id": appointment_object_id})
-                        if appointment and appointment.get("patient_id"):
+                        if appointment and appointment.get("patient_id") and appointment_id:
                             patient_id = appointment["patient_id"]
                             print(f"🔄 Processing transcript through LLM extraction pipeline...")
                             
                             # Process the transcript through the same pipeline as documents
+                            # Mark as transcript so discussion_summary can be updated
                             extraction_result = await process_medical_document(
                                 document_text=final_text,
                                 patient_id=patient_id,
@@ -510,12 +513,12 @@ async def live_detection(websocket: WebSocket):
                                 file_path=None  # No PDF, just text
                             )
                             
-                            if extraction_result.get("errors"):
+                            if extraction_result and extraction_result.get("errors"):
                                 print(f"⚠️  LLM extraction errors: {extraction_result['errors']}")
-                            else:
+                            elif extraction_result:
                                 print(f"✅ Successfully extracted and saved clinical information from transcript")
                         else:
-                            print(f"⚠️  Could not find patient_id in appointment, skipping LLM extraction")
+                            print(f"⚠️  Could not find patient_id or appointment_id, skipping LLM extraction")
                     except Exception as e:
                         print(f"⚠️  Error processing transcript through LLM pipeline: {e}")
                         import traceback
@@ -539,3 +542,96 @@ async def live_detection(websocket: WebSocket):
                 await websocket.close()
         except:
             pass  # Already closed or error closing
+
+
+@router.post("/{appointment_id}/diagnosis")
+async def generate_appointment_diagnosis(
+    appointment_id: str,
+    doctor: dict = Depends(check_doctor_exists)
+):
+    """
+    Generate 5 diagnoses for an appointment using Med42 model.
+    
+    Uses comprehensive patient data and appointment history:
+    - Patient medical history
+    - Current appointment (full details)
+    - Baseline appointment (seq 0)
+    - Previous 2 appointments
+    
+    Returns:
+    - Primary diagnosis (highest confidence) with:
+      * Diagnosis Summary
+      * Comprehensive Reasoning Chain
+      * Risk Factors
+    - 4 Alternative diagnoses with summaries
+    
+    The diagnosis is saved to the appointment's generated_diagnosis field.
+    """
+    try:
+        doctor_id = str(doctor["_id"])
+        
+        # Get appointment to extract patient_id
+        appointment = await appointment_collection.find_one({"_id": appointment_id})
+        if not appointment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Appointment {appointment_id} not found"
+            )
+        
+        patient_id = appointment.get("patient_id")
+        if not patient_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Appointment does not have a patient_id"
+            )
+        
+        # Verify doctor has access to this patient
+        has_access = await verify_doctor_patient_access(
+            doctor_id=doctor_id,
+            patient_id=str(patient_id),
+            appointment_id=appointment_id
+        )
+        
+        if not has_access:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this patient's data"
+            )
+        
+        # Generate diagnoses
+        print(f"🩺 Generating diagnoses for appointment {appointment_id}...")
+        diagnosis_text = await generate_diagnosis(
+            patient_id=str(patient_id),
+            appointment_id=appointment_id
+        )
+        
+        # Save diagnosis text to appointment
+        await appointment_collection.update_one(
+            {"_id": appointment_id},
+            {
+                "$set": {
+                    "generated_diagnosis_text": diagnosis_text,
+                    "diagnosis_generated_at": datetime.now(),
+                    "updated_at": datetime.now()
+                }
+            }
+        )
+        
+        print(f"✅ Diagnosis generated and saved to appointment")
+        
+        # Return text response
+        return {
+            "diagnosis_text": diagnosis_text,
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error in generate_appointment_diagnosis: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate diagnosis: {str(e)}"
+        )

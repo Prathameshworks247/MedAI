@@ -3,15 +3,17 @@ LangChain Agent for Medical Data Ingestion
 Uses a sequential pipeline approach compatible with Gemini
 """
 
+from typing import Optional
 from src.services.tools import extract_clinical_info, extract_text_from_pdf, _save_to_mongo_impl
 
 
 # Create a simple sequential pipeline function
 async def process_medical_document(
-    document_text: str,
+    document_text: Optional[str],
     patient_id: str,
     appointment_id: str,
-    file_path: str | None = None 
+    file_path: Optional[str] | None = None,
+    is_transcript: bool = False
 ) -> dict:
     """
     Sequential pipeline to process medical documents using tools.
@@ -57,10 +59,16 @@ async def process_medical_document(
         
         # Step 3: Save to MongoDB
         try:
+            # Determine if this is a transcript (not a PDF)
+            # If file_path is None and document_text is provided, it's likely a transcript
+            # Explicit is_transcript flag takes precedence
+            is_transcript_flag = is_transcript or (file_path is None and document_text is not None)
+            
             results["save_result"] = await _save_to_mongo_impl(
                 patient_id=patient_id,
                 appointment_id=appointment_id,
-                extracted=results["extracted_info"]
+                extracted=results["extracted_info"],
+                is_transcript=is_transcript_flag
             )
         except Exception as e:
             error_msg = f"Error saving to MongoDB: {str(e)}"
