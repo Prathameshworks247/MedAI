@@ -63,7 +63,7 @@ export function TestTrendChart({
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-card rounded-2xl shadow-sm border border-border/50 p-6 h-full flex flex-col"
+            className="bg-card rounded-2xl shadow-sm border border-border/50 p-6 flex flex-col h-full"
         >
             <div className="flex justify-between items-start mb-6">
                 <div>
@@ -84,10 +84,11 @@ export function TestTrendChart({
                 </div>
             </div>
 
-            <div className="h-64 w-full flex-1 min-h-[250px]">
+            {/* Fixed height container for Recharts to ensure visibility */}
+            <div className="w-full h-[250px] min-h-[250px]">
                 {chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                        <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                             <defs>
                                 <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
@@ -102,7 +103,7 @@ export function TestTrendChart({
                                     y1={normalRange[0]}
                                     y2={normalRange[1]}
                                     fill="hsl(var(--success))"
-                                    fillOpacity={0.05}
+                                    fillOpacity={0.1}
                                 />
                             )}
 
@@ -113,35 +114,37 @@ export function TestTrendChart({
                                 tickLine={false}
                                 axisLine={false}
                                 dy={10}
+                                interval="preserveStartEnd"
                             />
 
                             <YAxis
                                 domain={[
                                     (dataMin: number) => {
-                                        if (!hasNormalRange) return dataMin * 0.9;
-                                        return Math.min(dataMin, normalRange[0]!) * 0.9;
+                                        if (!hasNormalRange) return Math.floor(dataMin * 0.9);
+                                        return Math.floor(Math.min(dataMin, normalRange[0]!) * 0.9);
                                     },
                                     (dataMax: number) => {
-                                        if (!hasNormalRange) return dataMax * 1.1;
-                                        return Math.max(dataMax, normalRange[1]!) * 1.1;
+                                        if (!hasNormalRange) return Math.ceil(dataMax * 1.1);
+                                        return Math.ceil(Math.max(dataMax, normalRange[1]!) * 1.1);
                                     },
                                 ]}
                                 tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                                 stroke="hsl(var(--border))"
                                 tickLine={false}
                                 axisLine={false}
-                                unit={` ${unit}`}
-                                width={40}
+                                unit={unit ? ` ${unit}` : ""}
+                                width={45}
                             />
 
                             <Tooltip
+                                cursor={{ stroke: "hsl(var(--border))", strokeWidth: 2 }}
                                 content={({ active, payload }) => {
                                     if (active && payload && payload.length) {
                                         const point = payload[0].payload;
                                         const abnormal = isAbnormal(point.value);
                                         return (
-                                            <div className="bg-popover/95 backdrop-blur-md p-3 shadow-xl rounded-xl border border-border text-sm">
-                                                <p className="font-bold text-popover-foreground mb-1">
+                                            <div className="bg-popover/95 backdrop-blur-md p-3 shadow-xl rounded-xl border border-border text-xs z-50">
+                                                <p className="font-bold text-foreground mb-1">
                                                     {point.formattedDate}
                                                 </p>
                                                 <div className="flex items-center gap-2">
@@ -153,11 +156,6 @@ export function TestTrendChart({
                                                         {point.value} {unit}
                                                     </span>
                                                 </div>
-                                                {point.isBaseline && (
-                                                    <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded w-fit">
-                                                        Baseline
-                                                    </div>
-                                                )}
                                             </div>
                                         );
                                     }
@@ -177,15 +175,16 @@ export function TestTrendChart({
                                             key={payload.date}
                                             cx={cx}
                                             cy={cy}
-                                            r={5}
+                                            r={4}
                                             fill={abnormal ? "hsl(var(--destructive))" : "hsl(var(--background))"}
                                             stroke={abnormal ? "hsl(var(--destructive))" : "hsl(var(--primary))"}
-                                            strokeWidth={3}
-                                            className="transition-all hover:r-8"
+                                            strokeWidth={2}
+                                            className="transition-all hover:r-6 cursor-pointer"
                                         />
                                     );
                                 }}
-                                activeDot={{ r: 8, fill: "hsl(var(--primary))", strokeWidth: 0 }}
+                                activeDot={{ r: 6, fill: "hsl(var(--primary))", strokeWidth: 0 }}
+                                animationDuration={1000}
                             />
                         </LineChart>
                     </ResponsiveContainer>
@@ -197,13 +196,13 @@ export function TestTrendChart({
             </div>
 
             {data.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-border flex justify-between items-center text-sm">
-                    <div className="text-muted-foreground">
-                        Start: <span className="font-medium text-foreground">{data[0].value} {unit}</span>
+                <div className="mt-auto pt-4 flex justify-between items-center text-xs text-muted-foreground">
+                    <div>
+                        Start: <span className="font-medium text-foreground">{data[0].value}</span>
                     </div>
-                    <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                    <div className="text-muted-foreground">
-                        Latest: <span className="font-bold text-foreground">{data[data.length - 1].value} {unit}</span>
+                    <ArrowRight className="w-3 h-3 text-muted-foreground/50" />
+                    <div>
+                        Latest: <span className="font-bold text-foreground">{data[data.length - 1].value}</span>
                     </div>
                 </div>
             )}
