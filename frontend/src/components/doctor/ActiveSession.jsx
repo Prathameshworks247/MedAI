@@ -4,6 +4,7 @@ import { ArrowLeft, Square, Clock, CheckCircle, Upload, FileText, Brain, Downloa
 import { ACTIVITY_TYPES } from '../../data/appointmentData';
 import { apiRequest } from '../../utils/api';
 import DiagnosisDashboard from '../diagnosis/Main';
+import PDFViewer from './PDFViewer';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -43,9 +44,9 @@ const RequiredActivities = ({ session }) => (
                         <FileText className="w-5 h-5 text-gray-400" />
                     )}
                     <span className="font-semibold text-gray-900">Clinical Report</span>
-                </div>
-                <p className="text-xs text-gray-600">AI-generated SOAP report</p>
             </div>
+                <p className="text-xs text-gray-600">AI-generated SOAP report</p>
+          </div>
         </div>
     </div>
 );
@@ -74,13 +75,13 @@ const RecordingSection = ({
                         <Mic className={`w-5 h-5 mr-2 text-blue-600 ${isRecording ? 'animate-pulse' : ''}`} />
                         {isRecording ? 'Discussion Details' : 'Discussion Details'}
                     </h3>
-                    <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2">
                         {isRecording && (
                             <>
                                 <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
                                 <span className="text-sm text-gray-600">
                                     {isConnected ? 'Connected' : 'Connecting...'}
-                                </span>
+            </span>
                             </>
                         )}
                         {transcription && !isRecording && (
@@ -100,11 +101,11 @@ const RecordingSection = ({
                                 Export
                             </button>
                         )}
-                    </div>
-                </div>
+          </div>
+        </div>
 
                 <div className="bg-white border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
-                    <div className="space-y-2">
+            <div className="space-y-2">
                         {transcription && (
                             <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
                                 {transcription}
@@ -123,8 +124,8 @@ const RecordingSection = ({
                         )}
                         {!transcription && !partialTranscript && !isRecording && (
                             <p className="text-sm text-gray-400 italic text-center py-4">No transcription available. Start recording to generate one.</p>
-                        )}
-                    </div>
+              )}
+            </div>
                 </div>
 
                 {isRecording && (
@@ -170,10 +171,10 @@ const RecordingSection = ({
                                 <CheckCircle className="w-4 h-4 mr-2" />
                                 Finalize Recording
                             </button>
-                        </div>
-                    )}
-                </div>
-            )}
+              </div>
+              )}
+            </div>
+          )}
         </div>
     );
 };
@@ -208,7 +209,7 @@ const UploadSection = ({ title, icon: Icon, colorClass, borderClass, accept, onU
             {uploadedFiles && uploadedFiles.length > 0 && (
                 <div className="mt-4">
                     <h4 className="text-sm font-semibold text-gray-700 mb-2">Uploaded Files:</h4>
-                    <div className="space-y-2">
+            <div className="space-y-2">
                         {uploadedFiles.map((file, idx) => (
                             <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-2">
                                 <div className="flex items-center space-x-2 overflow-hidden">
@@ -216,7 +217,7 @@ const UploadSection = ({ title, icon: Icon, colorClass, borderClass, accept, onU
                                     <span className="text-sm text-gray-700 truncate" title={file.file_name || file.name || file.doc_name}>
                                         {file.file_name || file.name || file.doc_name}
                                     </span>
-                                </div>
+            </div>
                                 {file.uri ? (
                                     <a
                                         href={file.uri}
@@ -230,11 +231,11 @@ const UploadSection = ({ title, icon: Icon, colorClass, borderClass, accept, onU
                                 ) : (
                                     <CheckCircle className="w-4 h-4 text-green-600" />
                                 )}
-                            </div>
-                        ))}
                     </div>
+                  ))}
                 </div>
-            )}
+            </div>
+          )}
         </div>
     );
 };
@@ -270,6 +271,15 @@ const ActiveSession = () => {
     const [chatMessages, setChatMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
     const [chatLoading, setChatLoading] = useState(false);
+    const [pdfDocumentId, setPdfDocumentId] = useState(null);
+    const [uploadedPdf, setUploadedPdf] = useState(null);
+    const [uploadedPdfFile, setUploadedPdfFile] = useState(null); // Store the actual file object
+    const [uploadingPdf, setUploadingPdf] = useState(false);
+    
+    // PDF Viewer state
+    const [showPdfViewer, setShowPdfViewer] = useState(false);
+    const [viewerPage, setViewerPage] = useState(1);
+    const [viewerCoordinates, setViewerCoordinates] = useState(null);
 
     // Refs for audio recording
     const mediaRecorderRef = useRef(null);
@@ -741,6 +751,59 @@ const ActiveSession = () => {
         }
     };
 
+    // Handle PDF upload for chatbot
+    const handlePdfUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (!file.name.endsWith('.pdf')) {
+            alert('Please upload a PDF file');
+            e.target.value = '';
+            return;
+        }
+
+        setUploadingPdf(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const token = localStorage.getItem('access_token');
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`${API_BASE_URL}/doctors/upload-pdf`, {
+                method: 'POST',
+                body: formData,
+                headers: headers
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.detail || 'Failed to upload PDF');
+            }
+
+            setPdfDocumentId(data.document_id);
+            setUploadedPdf({
+                document_id: data.document_id,
+                file_name: data.file_name,
+                total_chunks: data.total_chunks,
+                total_pages: data.total_pages
+            });
+            setUploadedPdfFile(file); // Store the file object for viewing
+
+            alert(`PDF uploaded successfully! ${data.total_chunks} chunks from ${data.total_pages} pages. You can now ask questions about this document.`);
+        } catch (error) {
+            console.error('Error uploading PDF:', error);
+            alert(`Error uploading PDF: ${error.message}`);
+        } finally {
+            setUploadingPdf(false);
+            e.target.value = '';
+        }
+    };
+
     // Handle chat submission
     const handleChatSubmit = async (e) => {
         e.preventDefault();
@@ -774,7 +837,8 @@ const ActiveSession = () => {
                     question: question,
                     patient_id: patientId,
                     appointment_id: appointmentId,
-                    conversation_history: recentHistory
+                    conversation_history: recentHistory,
+                    pdf_document_id: pdfDocumentId  // Include PDF document ID if available
                 })
             });
 
@@ -783,7 +847,8 @@ const ActiveSession = () => {
                     role: 'assistant',
                     content: response.data.answer,
                     intent: response.data.intent,
-                    confidence: response.data.confidence
+                    confidence: response.data.confidence,
+                    citations: response.data.citations || []
                 };
                 setChatMessages(prev => [...prev, assistantMessage]);
             } else {
@@ -978,7 +1043,7 @@ const ActiveSession = () => {
         return (
             <div className="flex justify-center items-center h-screen">
                 <Loader className="w-8 h-8 animate-spin text-blue-500" />
-            </div>
+              </div>
         );
     }
 
@@ -1053,21 +1118,21 @@ const ActiveSession = () => {
                                             <span className={`text-xs px-3 py-1 rounded-full font-semibold ${getStatusBadge(prevApt.status)}`}>
                                                 {(prevApt.status || 'completed').replace('_', ' ')}
                                             </span>
-                                        </div>
+        </div>
 
                                         <div className="flex space-x-2">
-                                            <button
+        <button
                                                 onClick={() => setExpandedHistoryId(isExpanded ? null : prevApt.id)}
                                                 className="flex-1 btn-primary flex items-center justify-center"
-                                            >
-                                                <Eye className="w-4 h-4 mr-2" />
+        >
+          <Eye className="w-4 h-4 mr-2" />
                                                 {isExpanded ? 'Hide Details' : 'View Details'}
-                                            </button>
+        </button>
                                             <button className="btn-secondary flex items-center">
                                                 <Download className="w-4 h-4 mr-2" />
-                                                Export
-                                            </button>
-                                        </div>
+                    Export
+                  </button>
+                </div>
 
                                         {/* Details */}
                                         {isExpanded && session && (
@@ -1083,9 +1148,9 @@ const ActiveSession = () => {
                                                         </h6>
                                                         <div className="bg-gray-50 rounded-lg p-4 border border-gray-100 max-h-60 overflow-y-auto">
                                                             <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{session.discussion}</p>
-                                                        </div>
-                                                    </div>
-                                                )}
+                </div>
+              </div>
+            )}
 
                                                 {/* Reports */}
                                                 {session.reports && session.reports.length > 0 && (
@@ -1100,7 +1165,7 @@ const ActiveSession = () => {
                                                                     <div className="flex items-center space-x-3 overflow-hidden">
                                                                         <FileText className="w-5 h-5 text-gray-400 group-hover:text-green-500" />
                                                                         <span className="text-sm font-medium text-gray-700 truncate" title={report.file_name}>{report.file_name}</span>
-                                                                    </div>
+                  </div>
                                                                     <a
                                                                         href={report.uri}
                                                                         target="_blank"
@@ -1113,8 +1178,8 @@ const ActiveSession = () => {
                                                                 </div>
                                                             ))}
                                                         </div>
-                                                    </div>
-                                                )}
+                  </div>
+                )}
 
                                                 {/* Tests */}
                                                 {session.tests && session.tests.length > 0 && (
@@ -1140,63 +1205,63 @@ const ActiveSession = () => {
                                                                         <Eye className="w-4 h-4" />
                                                                     </a>
                                                                 </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                                                 {/* Fallback if no details */}
                                                 {!session.discussion && (!session.reports || session.reports.length === 0) && (!session.tests || session.tests.length === 0) && (
                                                     <p className="text-sm text-gray-500 italic text-center py-4">No detailed session records available.</p>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
+            )}
+          </div>
+        )}
+      </div>
+    );
                             })}
                         </div>
                     </div>
                 )}
-
-                <div className="card bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-300">
-                    <div className="flex items-start justify-between">
-                        <div>
-                            <div className="flex items-center space-x-3 mb-2">
-                                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                                <h2 className="text-2xl font-bold text-gray-900">ACTIVE SESSION</h2>
-                            </div>
+        
+        <div className="card bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-300">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="flex items-center space-x-3 mb-2">
+                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                <h2 className="text-2xl font-bold text-gray-900">ACTIVE SESSION</h2>
+              </div>
                             <h3 className="text-xl font-semibold text-gray-800 mb-1">{appointment.patient.name}</h3>
                             <p className="text-sm text-gray-600 font-semibold mb-1 capitalize">Chief Complaint: {appointment.chief_complaint}</p>
                             <p className="text-sm text-gray-600">{appointment.patient.age} years • {appointment.patient.gender} • {appointment.scheduledTime}</p>
-
+              
                             {appointment.type === 'followup' && (
-                                <div className="mt-3 p-3 bg-purple-100 border border-purple-200 rounded-lg">
-                                    <p className="text-sm font-semibold text-purple-900">
+                <div className="mt-3 p-3 bg-purple-100 border border-purple-200 rounded-lg">
+                  <p className="text-sm font-semibold text-purple-900">
                                         🔄 Follow Up Visit #{appointment.appointmentNumber}
-                                    </p>
-                                </div>
-                            )}
-
-                            {appointment.type === 'baseline' && (
-                                <div className="mt-3 p-3 bg-blue-100 border border-blue-200 rounded-lg">
-                                    <p className="text-sm font-semibold text-blue-900">
-                                        🆕 Baseline Visit
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="text-right">
-                            <div className="flex items-center space-x-2 text-gray-700 mb-2">
-                                <Clock className="w-4 h-4" />
-                                <span className="text-sm">Started: {session?.startedAt}</span>
-                            </div>
-                            <div className="text-2xl font-bold text-green-600">{session?.totalDuration}</div>
-                            <p className="text-xs text-gray-600">Session Duration</p>
-                        </div>
-                    </div>
+                  </p>
                 </div>
+              )}
+              
+                            {appointment.type === 'baseline' && (
+                <div className="mt-3 p-3 bg-blue-100 border border-blue-200 rounded-lg">
+                  <p className="text-sm font-semibold text-blue-900">
+                                        🆕 Baseline Visit
+                  </p>
+                </div>
+              )}
             </div>
+            
+            <div className="text-right">
+              <div className="flex items-center space-x-2 text-gray-700 mb-2">
+                <Clock className="w-4 h-4" />
+                <span className="text-sm">Started: {session?.startedAt}</span>
+              </div>
+              <div className="text-2xl font-bold text-green-600">{session?.totalDuration}</div>
+              <p className="text-xs text-gray-600">Session Duration</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
             <RequiredActivities session={session} />
 
@@ -1247,9 +1312,28 @@ const ActiveSession = () => {
                         <MessageSquare className="w-5 h-5 mr-2 text-blue-600" />
                         AI Chat Assistant
                     </h3>
-                    <p className="text-sm text-gray-600 mb-4">
-                        Ask questions about this appointment, patient history, test results, or diagnosis.
-                    </p>
+                    <div className="flex items-center justify-between mb-4">
+                        <p className="text-sm text-gray-600">
+                            Ask questions about this appointment, patient history, test results, or diagnosis.
+                        </p>
+                        {uploadedPdf && (
+                            <div className="flex items-center space-x-2 text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full">
+                                <FileText className="w-3 h-3" />
+                                <span className="font-semibold">{uploadedPdf.file_name}</span>
+                                <button
+                                    onClick={() => {
+                                        setPdfDocumentId(null);
+                                        setUploadedPdf(null);
+                                        setUploadedPdfFile(null);
+                                    }}
+                                    className="ml-2 text-red-600 hover:text-red-800 font-bold"
+                                    title="Clear PDF"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        )}
+          </div>
 
                     {/* Chat Messages */}
                     <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4 max-h-96 overflow-y-auto">
@@ -1277,8 +1361,40 @@ const ActiveSession = () => {
                                                     Intent: {msg.intent} (confidence: {(msg.confidence * 100).toFixed(0)}%)
                                                 </p>
                                             )}
-                                        </div>
-                                    </div>
+                                            {msg.citations && msg.citations.length > 0 && (
+                                                <div className="mt-3 pt-3 border-t border-gray-300">
+                                                    <p className="text-xs font-semibold mb-2">Citations:</p>
+                                                    <div className="space-y-1">
+                                                        {msg.citations.map((citation, idx) => (
+                                                            <div 
+                                                                key={idx} 
+                                                                className="text-xs bg-white/50 rounded p-2 hover:bg-blue-50 cursor-pointer transition-colors border border-transparent hover:border-blue-300 overflow-hidden"
+                                                                onClick={() => {
+                                                                    if (uploadedPdfFile) {
+                                                                        setViewerPage(citation.page_number);
+                                                                        setViewerCoordinates(citation.coordinates);
+                                                                        setShowPdfViewer(true);
+                                                                    }
+                                                                }}
+                                                                title="Click to view in PDF"
+                                                            >
+                                                                <div className="flex items-start justify-between gap-2">
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="font-semibold flex items-center">
+                                                                            <FileText className="w-3 h-3 mr-1 flex-shrink-0" />
+                                                                            <span className="truncate">Page {citation.page_number}</span>
+                                                                        </p>
+                                                                        <p className="text-gray-600 break-words mt-1 line-clamp-2">{citation.text_preview}</p>
+                                                                    </div>
+                                                                    <Eye className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+            </div>
+          </div>
                                 ))}
                                 {chatLoading && (
                                     <div className="flex justify-start">
@@ -1289,7 +1405,7 @@ const ActiveSession = () => {
                                 )}
                             </div>
                         )}
-                    </div>
+        </div>
 
                     {/* Chat Input */}
                     <form onSubmit={handleChatSubmit} className="flex space-x-2">
@@ -1297,10 +1413,29 @@ const ActiveSession = () => {
                             type="text"
                             value={chatInput}
                             onChange={(e) => setChatInput(e.target.value)}
-                            placeholder="Ask a question about this appointment..."
+                            placeholder={uploadedPdf ? "Ask a question about the uploaded PDF..." : "Ask a question about this appointment..."}
                             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             disabled={chatLoading}
                         />
+                        <input
+                            type="file"
+                            accept=".pdf"
+                            onChange={handlePdfUpload}
+                            disabled={uploadingPdf || chatLoading}
+                            className="hidden"
+                            id="pdf-upload-chat"
+                        />
+                        <label
+                            htmlFor="pdf-upload-chat"
+                            className={`btn-secondary flex items-center justify-center cursor-pointer px-3 py-2 ${uploadingPdf || chatLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title={uploadedPdf ? `PDF: ${uploadedPdf.file_name}` : "Upload PDF for chat context"}
+                        >
+                            {uploadingPdf ? (
+                                <Loader className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Upload className={`w-4 h-4 ${uploadedPdf ? 'text-blue-600' : ''}`} />
+                            )}
+                        </label>
                         <button
                             type="submit"
                             disabled={!chatInput.trim() || chatLoading}
@@ -1314,10 +1449,10 @@ const ActiveSession = () => {
                                     Send
                                 </>
                             )}
-                        </button>
+              </button>
                     </form>
-                </div>
-            )}
+          </div>
+        )}
 
             {/* Diagnostic Insights - Show if generated */}
 
@@ -1332,103 +1467,116 @@ const ActiveSession = () => {
                         <p className="text-sm text-gray-500 mt-1">
                             Comprehensive analysis generated on {new Date(appointment.diagnosis_generated_at).toLocaleString()}
                         </p>
-                    </div>
+              </div>
                     <DiagnosisDashboard
                         data={appointment.generated_diagnosis}
                     />
+        </div>
+      )}
+
+
+      {/* Additional Actions - Only show after required activities */}
+      {requiredComplete && (
+        <div className="card bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200">
+          <h3 className="text-lg font-bold text-gray-900 mb-4">Additional Actions</h3>
+          <p className="text-sm text-gray-600 mb-4">
+            All required activities completed. You can now upload additional documents or generate diagnosis at any time.
+          </p>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <button className="card hover:shadow-lg transition-all border-2 border-orange-200 bg-orange-50 text-left p-4">
+              <div className="flex items-start space-x-3">
+                <TestTube2 className="w-6 h-6 text-orange-600 flex-shrink-0" />
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-1">Upload Test Results</h4>
+                  <p className="text-xs text-gray-600">Blood work, ECG, X-rays, etc.</p>
                 </div>
-            )}
+              </div>
+            </button>
 
-
-            {/* Additional Actions - Only show after required activities */}
-            {requiredComplete && (
-                <div className="card bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200">
-                    <h3 className="text-lg font-bold text-gray-900 mb-4">Additional Actions</h3>
-                    <p className="text-sm text-gray-600 mb-4">
-                        All required activities completed. You can now upload additional documents or generate diagnosis at any time.
-                    </p>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <button className="card hover:shadow-lg transition-all border-2 border-orange-200 bg-orange-50 text-left p-4">
-                            <div className="flex items-start space-x-3">
-                                <TestTube2 className="w-6 h-6 text-orange-600 flex-shrink-0" />
-                                <div>
-                                    <h4 className="font-semibold text-gray-900 mb-1">Upload Test Results</h4>
-                                    <p className="text-xs text-gray-600">Blood work, ECG, X-rays, etc.</p>
-                                </div>
-                            </div>
-                        </button>
-
-                        <button className="card hover:shadow-lg transition-all border-2 border-red-200 bg-red-50 text-left p-4">
-                            <div className="flex items-start space-x-3">
-                                <Brain className="w-6 h-6 text-red-600 flex-shrink-0" />
-                                <div>
-                                    <h4 className="font-semibold text-gray-900 mb-1">Generate Diagnosis</h4>
-                                    <p className="text-xs text-gray-600">AI-powered insights & recommendations</p>
-                                </div>
-                            </div>
-                        </button>
-
-                        <button
-                            onClick={() => navigate(`/doctor/chat/${appointmentId}`)}
-                            className="card hover:shadow-lg transition-all border-2 border-blue-200 bg-blue-50 text-left p-4"
-                        >
-                            <div className="flex items-start space-x-3">
-                                <MessageSquare className="w-6 h-6 text-blue-600 flex-shrink-0" />
-                                <div>
-                                    <h4 className="font-semibold text-gray-900 mb-1">Chat with AI</h4>
-                                    <p className="text-xs text-gray-600">Ask questions about this case</p>
-                                </div>
-                            </div>
-                        </button>
-
-                        <button className="card hover:shadow-lg transition-all border-2 border-gray-200 bg-gray-50 text-left p-4">
-                            <div className="flex items-start space-x-3">
-                                <Plus className="w-6 h-6 text-gray-600 flex-shrink-0" />
-                                <div>
-                                    <h4 className="font-semibold text-gray-900 mb-1">Add Documents</h4>
-                                    <p className="text-xs text-gray-600">Any additional files or notes</p>
-                                </div>
-                            </div>
-                        </button>
-
-                        <button className="card hover:shadow-lg transition-all border-2 border-green-200 bg-green-50 text-left p-4">
-                            <div className="flex items-start space-x-3">
-                                <Download className="w-6 h-6 text-green-600 flex-shrink-0" />
-                                <div>
-                                    <h4 className="font-semibold text-gray-900 mb-1">Export All</h4>
-                                    <p className="text-xs text-gray-600">Download complete session record</p>
-                                </div>
-                            </div>
-                        </button>
-                    </div>
+            <button className="card hover:shadow-lg transition-all border-2 border-red-200 bg-red-50 text-left p-4">
+              <div className="flex items-start space-x-3">
+                <Brain className="w-6 h-6 text-red-600 flex-shrink-0" />
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-1">Generate Diagnosis</h4>
+                  <p className="text-xs text-gray-600">AI-powered insights & recommendations</p>
                 </div>
-            )}
+              </div>
+            </button>
 
-            {/* Session Controls */}
-            <div className="card mt-6 bg-gray-50">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-sm text-gray-600">Session Status</p>
+            <button 
+              onClick={() => navigate(`/doctor/chat/${appointmentId}`)}
+              className="card hover:shadow-lg transition-all border-2 border-blue-200 bg-blue-50 text-left p-4"
+            >
+              <div className="flex items-start space-x-3">
+                <MessageSquare className="w-6 h-6 text-blue-600 flex-shrink-0" />
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-1">Chat with AI</h4>
+                  <p className="text-xs text-gray-600">Ask questions about this case</p>
+                </div>
+              </div>
+            </button>
+
+            <button className="card hover:shadow-lg transition-all border-2 border-gray-200 bg-gray-50 text-left p-4">
+              <div className="flex items-start space-x-3">
+                <Plus className="w-6 h-6 text-gray-600 flex-shrink-0" />
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-1">Add Documents</h4>
+                  <p className="text-xs text-gray-600">Any additional files or notes</p>
+                </div>
+              </div>
+            </button>
+
+            <button className="card hover:shadow-lg transition-all border-2 border-green-200 bg-green-50 text-left p-4">
+              <div className="flex items-start space-x-3">
+                <Download className="w-6 h-6 text-green-600 flex-shrink-0" />
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-1">Export All</h4>
+                  <p className="text-xs text-gray-600">Download complete session record</p>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Session Controls */}
+      <div className="card mt-6 bg-gray-50">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-gray-600">Session Status</p>
                         <p className="text-lg font-semibold text-gray-900 capitalize">{appointment.status.split('_').join(' ')}</p>
-                    </div>
-                    <div className="flex space-x-3">
+          </div>
+          <div className="flex space-x-3">
                         <button
                             onClick={handlePauseSession}
                             className="btn-secondary flex items-center"
                         >
-                            Pause Session
-                        </button>
+              Pause Session
+            </button>
                         <button
                             onClick={handleEndSession}
                             className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors flex items-center"
                         >
                             <CheckCircle className="w-4 h-4 mr-2" />
-                            End Session
-                        </button>
-                    </div>
+              End Session
+            </button>
+          </div>
                 </div>
             </div>
+
+            {/* PDF Viewer Modal */}
+            {showPdfViewer && uploadedPdfFile && (
+                <PDFViewer
+                    pdfFile={uploadedPdfFile}
+                    pageNumber={viewerPage}
+                    coordinates={viewerCoordinates}
+                    onClose={() => {
+                        setShowPdfViewer(false);
+                        setViewerCoordinates(null);
+                    }}
+                />
+            )}
         </div>
     );
 };

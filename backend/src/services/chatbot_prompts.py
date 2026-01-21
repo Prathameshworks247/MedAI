@@ -51,16 +51,37 @@ def build_chatbot_prompt(intent: str, context: dict, question: str, conversation
     # Format context as JSON string for the prompt
     import json
     
-    # Truncate context if too large to stay within token limits
-    # Estimate: ~4 characters per token, so 4096 tokens = ~16KB
-    # Reserve space for system prompt (~500 tokens), conversation history (~500 tokens), question (~100 tokens)
-    # So we have ~3000 tokens = ~12KB for context
-    MAX_CONTEXT_CHARS = 12000
+    # For PDF queries, format PDF chunks differently
+    if intent == "pdf_query" and "pdf_context" in context:
+        # Format PDF context with relevant chunks
+        pdf_context = context["pdf_context"]
+        relevant_chunks = pdf_context.get("relevant_chunks", [])
+        
+        # Build formatted PDF context
+        pdf_context_text = f"PDF Document ID: {pdf_context.get('pdf_document_id', 'unknown')}\n\n"
+        pdf_context_text += "Relevant sections from the PDF:\n\n"
+        
+        for idx, chunk in enumerate(relevant_chunks, 1):
+            pdf_context_text += f"[Section {idx} - Page {chunk.get('page_number', 'N/A')}]\n"
+            pdf_context_text += f"Text: {chunk.get('text', '')}\n"
+            pdf_context_text += f"Coordinates: x0={chunk.get('coordinates', {}).get('x0', 'N/A')}, "
+            pdf_context_text += f"y0={chunk.get('coordinates', {}).get('y0', 'N/A')}, "
+            pdf_context_text += f"x1={chunk.get('coordinates', {}).get('x1', 'N/A')}, "
+            pdf_context_text += f"y1={chunk.get('coordinates', {}).get('y1', 'N/A')}\n"
+            pdf_context_text += f"Relevance Score: {chunk.get('score', 0):.4f}\n\n"
+        
+        context_json_raw = pdf_context_text
+    else:
+        # Truncate context if too large to stay within token limits
+        # Estimate: ~4 characters per token, so 4096 tokens = ~16KB
+        # Reserve space for system prompt (~500 tokens), conversation history (~500 tokens), question (~100 tokens)
+        # So we have ~3000 tokens = ~12KB for context
+        MAX_CONTEXT_CHARS = 12000
+        
+        context_json_raw = json.dumps(context, indent=2, default=str)
     
-    context_json_raw = json.dumps(context, indent=2, default=str)
-    
-    # Truncate if too large
-    if len(context_json_raw) > MAX_CONTEXT_CHARS:
+    # Truncate if too large (only for non-PDF contexts)
+    if intent != "pdf_query" and len(context_json_raw) > MAX_CONTEXT_CHARS:
         # Try to truncate intelligently - keep structure but reduce content
         truncated = context_json_raw[:MAX_CONTEXT_CHARS]
         # Try to close JSON properly
@@ -129,6 +150,14 @@ Focus on:
 - Appointment sequence (current and previous: -2, -1, -0)
 - Discussion summaries from all appointments
 - Any relevant data from the database
+""",
+        "pdf_query": """
+Focus on:
+- ONLY use information from the uploaded PDF document provided in the context
+- Reference specific page numbers and sections when citing information
+- If the question cannot be answered from the PDF, explicitly state that the information is not available in the uploaded document
+- Do NOT use any database information - only the PDF content
+- Cite page numbers when providing information
 """
     }
     

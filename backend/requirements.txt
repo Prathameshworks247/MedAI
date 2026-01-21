@@ -14,3 +14,6 @@ pydantic
 langchain-community
 pydub
 pdfplumber
+faiss-cpu
+sentence-transformers
+torch
