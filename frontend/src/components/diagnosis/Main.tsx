@@ -19,6 +19,7 @@ const DiagnosisDashboard = ({ data }: { data: any }) => {
         progress_metrics,
         patient
     } = data;
+    console.log(clinical_reasoning);
 
     // Transform primary diagnosis to match component expectation
     const diagnosisData = primary_diagnosis ? {
