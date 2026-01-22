@@ -44,9 +44,9 @@ const RequiredActivities = ({ session }) => (
                         <FileText className="w-5 h-5 text-gray-400" />
                     )}
                     <span className="font-semibold text-gray-900">Clinical Report</span>
-            </div>
+                </div>
                 <p className="text-xs text-gray-600">AI-generated SOAP report</p>
-          </div>
+            </div>
         </div>
     </div>
 );
@@ -75,13 +75,13 @@ const RecordingSection = ({
                         <Mic className={`w-5 h-5 mr-2 text-blue-600 ${isRecording ? 'animate-pulse' : ''}`} />
                         {isRecording ? 'Discussion Details' : 'Discussion Details'}
                     </h3>
-          <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2">
                         {isRecording && (
                             <>
                                 <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
                                 <span className="text-sm text-gray-600">
                                     {isConnected ? 'Connected' : 'Connecting...'}
-            </span>
+                                </span>
                             </>
                         )}
                         {transcription && !isRecording && (
@@ -101,11 +101,11 @@ const RecordingSection = ({
                                 Export
                             </button>
                         )}
-          </div>
-        </div>
+                    </div>
+                </div>
 
                 <div className="bg-white border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
-            <div className="space-y-2">
+                    <div className="space-y-2">
                         {transcription && (
                             <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
                                 {transcription}
@@ -124,8 +124,8 @@ const RecordingSection = ({
                         )}
                         {!transcription && !partialTranscript && !isRecording && (
                             <p className="text-sm text-gray-400 italic text-center py-4">No transcription available. Start recording to generate one.</p>
-              )}
-            </div>
+                        )}
+                    </div>
                 </div>
 
                 {isRecording && (
@@ -171,10 +171,10 @@ const RecordingSection = ({
                                 <CheckCircle className="w-4 h-4 mr-2" />
                                 Finalize Recording
                             </button>
-              </div>
-              )}
-            </div>
-          )}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };
@@ -209,7 +209,7 @@ const UploadSection = ({ title, icon: Icon, colorClass, borderClass, accept, onU
             {uploadedFiles && uploadedFiles.length > 0 && (
                 <div className="mt-4">
                     <h4 className="text-sm font-semibold text-gray-700 mb-2">Uploaded Files:</h4>
-            <div className="space-y-2">
+                    <div className="space-y-2">
                         {uploadedFiles.map((file, idx) => (
                             <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-2">
                                 <div className="flex items-center space-x-2 overflow-hidden">
@@ -217,7 +217,7 @@ const UploadSection = ({ title, icon: Icon, colorClass, borderClass, accept, onU
                                     <span className="text-sm text-gray-700 truncate" title={file.file_name || file.name || file.doc_name}>
                                         {file.file_name || file.name || file.doc_name}
                                     </span>
-            </div>
+                                </div>
                                 {file.uri ? (
                                     <a
                                         href={file.uri}
@@ -231,11 +231,11 @@ const UploadSection = ({ title, icon: Icon, colorClass, borderClass, accept, onU
                                 ) : (
                                     <CheckCircle className="w-4 h-4 text-green-600 mr-1" />
                                 )}
+                            </div>
+                        ))}
                     </div>
-                  ))}
                 </div>
-            </div>
-          )}
+            )}
         </div>
     );
 };
@@ -275,11 +275,17 @@ const ActiveSession = () => {
     const [uploadedPdf, setUploadedPdf] = useState(null);
     const [uploadedPdfFile, setUploadedPdfFile] = useState(null); // Store the actual file object
     const [uploadingPdf, setUploadingPdf] = useState(false);
-    
+
     // PDF Viewer state
     const [showPdfViewer, setShowPdfViewer] = useState(false);
     const [viewerPage, setViewerPage] = useState(1);
     const [viewerCoordinates, setViewerCoordinates] = useState(null);
+
+    // Doctor's diagnosis state
+    const [doctorDiagnosisText, setDoctorDiagnosisText] = useState('');
+    const [doctorDiagnosisFiles, setDoctorDiagnosisFiles] = useState([]);
+    const [uploadingDoctorDiagnosis, setUploadingDoctorDiagnosis] = useState(false);
+    const [generatingDiagnosis, setGeneratingDiagnosis] = useState(false);
 
     // Refs for audio recording
     const mediaRecorderRef = useRef(null);
@@ -915,6 +921,94 @@ const ActiveSession = () => {
         }
     };
 
+    // Handle Generate Diagnosis button click
+    const handleGenerateDiagnosis = async () => {
+        if (!transcriptRecorded && !documentsUploaded) {
+            alert('Please complete recording or upload documents before generating diagnosis.');
+            return;
+        }
+
+        setGeneratingDiagnosis(true);
+        try {
+            const response = await apiRequest(`/appointments/${appointmentId}/diagnosis`, {
+                method: 'POST'
+            });
+
+            if (!response.success) {
+                throw new Error(response.error || 'Failed to generate diagnosis');
+            }
+
+            const generatedAt = response?.data?.generated_at || new Date().toISOString();
+
+            // Update local appointment state so the diagnosis renders immediately without a full refetch
+            setAppointment(prev => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
+                    generated_diagnosis: response?.data?.diagnosis ?? prev.generated_diagnosis,
+                    generated_diagnosis_text: response?.data?.diagnosis_text ?? prev.generated_diagnosis_text,
+                    diagnosis_generated_at: generatedAt
+                };
+            });
+
+            alert('Diagnosis generated successfully.');
+        } catch (error) {
+            console.error('Error generating diagnosis:', error);
+            alert(`An error occurred while generating diagnosis: ${error.message || 'Unknown error'}`);
+        } finally {
+            setGeneratingDiagnosis(false);
+        }
+    };
+
+    // Handle doctor's diagnosis file upload
+    const handleDoctorDiagnosisFileUpload = async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+
+        setUploadingDoctorDiagnosis(true);
+        try {
+            // TODO: Implement API call when route is ready
+            // For now, just store locally
+            const uploadedFileList = files.map(file => ({
+                name: file.name,
+                file: file,
+                uploaded: false
+            }));
+            setDoctorDiagnosisFiles(prev => [...prev, ...uploadedFileList]);
+            alert(`Files selected: ${files.map(f => f.name).join(', ')}. Upload will be implemented when route is ready.`);
+        } catch (error) {
+            console.error('Error uploading doctor diagnosis files:', error);
+            alert(`Error uploading files: ${error.message}`);
+        } finally {
+            setUploadingDoctorDiagnosis(false);
+            e.target.value = '';
+        }
+    };
+
+    // Handle saving doctor's diagnosis
+    const handleSaveDoctorDiagnosis = async () => {
+        if (!doctorDiagnosisText.trim() && doctorDiagnosisFiles.length === 0) {
+            alert('Please provide diagnosis text or upload files.');
+            return;
+        }
+
+        try {
+            // TODO: Implement API call when route is ready
+            // const response = await apiRequest(`/appointments/${appointmentId}/doctor-diagnosis`, {
+            //     method: 'POST',
+            //     body: JSON.stringify({
+            //         diagnosis_text: doctorDiagnosisText,
+            //         files: doctorDiagnosisFiles
+            //     })
+            // });
+            console.log('Save doctor diagnosis clicked - route not implemented yet');
+            alert('Save Doctor Diagnosis feature will be available soon.');
+        } catch (error) {
+            console.error('Error saving doctor diagnosis:', error);
+            alert('An error occurred while saving diagnosis.');
+        }
+    };
+
     useEffect(() => {
         const fetchAppointment = async () => {
             try {
@@ -1043,7 +1137,7 @@ const ActiveSession = () => {
         return (
             <div className="flex justify-center items-center h-screen">
                 <Loader className="w-8 h-8 animate-spin text-blue-500" />
-              </div>
+            </div>
         );
     }
 
@@ -1117,21 +1211,21 @@ const ActiveSession = () => {
                                             <span className={`text-xs px-3 py-1 rounded-full font-semibold ${getStatusBadge(prevApt.status)}`}>
                                                 {(prevApt.status || 'completed').replace('_', ' ')}
                                             </span>
-        </div>
+                                        </div>
 
                                         <div className="flex space-x-2">
-        <button
+                                            <button
                                                 onClick={() => setExpandedHistoryId(isExpanded ? null : prevApt.id)}
                                                 className="flex-1 btn-primary flex items-center justify-center"
-        >
-          <Eye className="w-4 h-4 mr-2" />
+                                            >
+                                                <Eye className="w-4 h-4 mr-2" />
                                                 {isExpanded ? 'Hide Details' : 'View Details'}
-        </button>
+                                            </button>
                                             <button className="btn-secondary flex items-center">
                                                 <Download className="w-4 h-4 mr-2" />
-                    Export
-                  </button>
-                </div>
+                                                Export
+                                            </button>
+                                        </div>
 
                                         {/* Details */}
                                         {isExpanded && session && (
@@ -1147,9 +1241,9 @@ const ActiveSession = () => {
                                                         </h6>
                                                         <div className="bg-gray-50 rounded-lg p-4 border border-gray-100 max-h-60 overflow-y-auto">
                                                             <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{session.discussion}</p>
-                </div>
-              </div>
-            )}
+                                                        </div>
+                                                    </div>
+                                                )}
 
                                                 {/* Reports */}
                                                 {session.reports && session.reports.length > 0 && (
@@ -1164,7 +1258,7 @@ const ActiveSession = () => {
                                                                     <div className="flex items-center space-x-3 overflow-hidden">
                                                                         <FileText className="w-5 h-5 text-gray-400 group-hover:text-green-500" />
                                                                         <span className="text-sm font-medium text-gray-700 truncate" title={report.file_name}>{report.file_name}</span>
-                  </div>
+                                                                    </div>
                                                                     <a
                                                                         href={report.uri}
                                                                         target="_blank"
@@ -1177,8 +1271,8 @@ const ActiveSession = () => {
                                                                 </div>
                                                             ))}
                                                         </div>
-                  </div>
-                )}
+                                                    </div>
+                                                )}
 
                                                 {/* Tests */}
                                                 {session.tests && session.tests.length > 0 && (
@@ -1204,63 +1298,63 @@ const ActiveSession = () => {
                                                                         <Eye className="w-4 h-4" />
                                                                     </a>
                                                                 </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
 
                                                 {/* Fallback if no details */}
                                                 {!session.discussion && (!session.reports || session.reports.length === 0) && (!session.tests || session.tests.length === 0) && (
                                                     <p className="text-sm text-gray-500 italic text-center py-4">No detailed session records available.</p>
-            )}
-          </div>
-        )}
-      </div>
-    );
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
                             })}
                         </div>
                     </div>
                 )}
-        
-        <div className="card bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-300">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center space-x-3 mb-2">
-                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                <h2 className="text-2xl font-bold text-gray-900">ACTIVE SESSION</h2>
-              </div>
+
+                <div className="card bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-300">
+                    <div className="flex items-start justify-between">
+                        <div>
+                            <div className="flex items-center space-x-3 mb-2">
+                                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                                <h2 className="text-2xl font-bold text-gray-900">ACTIVE SESSION</h2>
+                            </div>
                             <h3 className="text-xl font-semibold text-gray-800 mb-1">{appointment.patient.name}</h3>
                             <p className="text-sm text-gray-600 font-semibold mb-1 capitalize">Chief Complaint: {appointment.chief_complaint}</p>
                             <p className="text-sm text-gray-600">{appointment.patient.age} years • {appointment.patient.gender} • {appointment.scheduledTime}</p>
-              
+
                             {appointment.type === 'followup' && (
-                <div className="mt-3 p-3 bg-purple-100 border border-purple-200 rounded-lg">
-                  <p className="text-sm font-semibold text-purple-900">
+                                <div className="mt-3 p-3 bg-purple-100 border border-purple-200 rounded-lg">
+                                    <p className="text-sm font-semibold text-purple-900">
                                         🔄 Follow Up Visit #{appointment.appointmentNumber}
-                  </p>
-                </div>
-              )}
-              
+                                    </p>
+                                </div>
+                            )}
+
                             {appointment.type === 'baseline' && (
-                <div className="mt-3 p-3 bg-blue-100 border border-blue-200 rounded-lg">
-                  <p className="text-sm font-semibold text-blue-900">
+                                <div className="mt-3 p-3 bg-blue-100 border border-blue-200 rounded-lg">
+                                    <p className="text-sm font-semibold text-blue-900">
                                         🆕 Baseline Visit
-                  </p>
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="text-right">
+                            <div className="flex items-center space-x-2 text-gray-700 mb-2">
+                                <Clock className="w-4 h-4" />
+                                <span className="text-sm">Started: {session?.startedAt}</span>
+                            </div>
+                            <div className="text-2xl font-bold text-green-600">{session?.totalDuration}</div>
+                            <p className="text-xs text-gray-600">Session Duration</p>
+                        </div>
+                    </div>
                 </div>
-              )}
             </div>
-            
-            <div className="text-right">
-              <div className="flex items-center space-x-2 text-gray-700 mb-2">
-                <Clock className="w-4 h-4" />
-                <span className="text-sm">Started: {session?.startedAt}</span>
-              </div>
-              <div className="text-2xl font-bold text-green-600">{session?.totalDuration}</div>
-              <p className="text-xs text-gray-600">Session Duration</p>
-            </div>
-          </div>
-        </div>
-      </div>
 
             <RequiredActivities session={session} />
 
@@ -1304,6 +1398,48 @@ const ActiveSession = () => {
                 />
             </div>
 
+            {/* Generate Diagnosis Button - Show before diagnosis is generated */}
+            {!appointment.diagnosis_generated_at && (
+                <div className="mt-6 card bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-300">
+                    <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                            <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center">
+                                <Brain className="w-5 h-5 mr-2 text-indigo-600" />
+                                AI Diagnostic Analysis
+                            </h3>
+                            <p className="text-sm text-gray-600">
+                                Generate comprehensive AI-powered diagnostic insights based on the consultation recording and uploaded documents.
+                            </p>
+                            {!transcriptRecorded && !documentsUploaded && (
+                                <p className="text-sm text-orange-600 mt-2 font-semibold">
+                                    ⚠ Complete recording or upload documents to enable diagnosis generation
+                                </p>
+                            )}
+                        </div>
+                        <button
+                            onClick={handleGenerateDiagnosis}
+                            disabled={!transcriptRecorded && !documentsUploaded || generatingDiagnosis}
+                            className={`ml-4 px-6 py-3 rounded-lg font-semibold transition-all flex items-center ${(transcriptRecorded || documentsUploaded) && !generatingDiagnosis
+                                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg hover:shadow-xl'
+                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                }`}
+                        >
+                            {generatingDiagnosis ? (
+                                <>
+                                    <Loader className="w-5 h-5 mr-2 animate-spin" />
+                                    Generating...
+                                </>
+                            ) : (
+                                <>
+                                    <Sparkles className="w-5 h-5 mr-2" />
+                                    Generate Diagnosis
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Chat Section - Show after documents are uploaded */}
             {documentsUploaded && (
                 <div className="mt-6 card bg-blue-50 border-2 border-blue-300">
@@ -1332,7 +1468,7 @@ const ActiveSession = () => {
                                 </button>
                             </div>
                         )}
-          </div>
+                    </div>
 
                     {/* Chat Messages */}
                     <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4 max-h-96 overflow-y-auto">
@@ -1365,8 +1501,8 @@ const ActiveSession = () => {
                                                     <p className="text-xs font-semibold mb-2">Citations:</p>
                                                     <div className="space-y-1">
                                                         {msg.citations.map((citation, idx) => (
-                                                            <div 
-                                                                key={idx} 
+                                                            <div
+                                                                key={idx}
                                                                 className="text-xs bg-white/50 rounded p-2 hover:bg-blue-50 cursor-pointer transition-colors border border-transparent hover:border-blue-300 overflow-hidden"
                                                                 onClick={() => {
                                                                     if (uploadedPdfFile) {
@@ -1392,8 +1528,8 @@ const ActiveSession = () => {
                                                     </div>
                                                 </div>
                                             )}
-            </div>
-          </div>
+                                        </div>
+                                    </div>
                                 ))}
                                 {chatLoading && (
                                     <div className="flex justify-start">
@@ -1404,7 +1540,7 @@ const ActiveSession = () => {
                                 )}
                             </div>
                         )}
-        </div>
+                    </div>
 
                     {/* Chat Input */}
                     <form onSubmit={handleChatSubmit} className="flex space-x-2">
@@ -1448,10 +1584,10 @@ const ActiveSession = () => {
                                     Send
                                 </>
                             )}
-              </button>
+                        </button>
                     </form>
-          </div>
-        )}
+                </div>
+            )}
 
             {/* Diagnostic Insights - Show if generated */}
 
@@ -1466,101 +1602,237 @@ const ActiveSession = () => {
                         <p className="text-sm text-gray-500 mt-1">
                             Comprehensive analysis generated on {new Date(appointment.diagnosis_generated_at).toLocaleString()}
                         </p>
-              </div>
+                    </div>
                     <DiagnosisDashboard
                         data={appointment.generated_diagnosis}
                     />
-        </div>
-      )}
-
-
-      {/* Additional Actions - Only show after required activities */}
-      {requiredComplete && (
-        <div className="card bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">Additional Actions</h3>
-          <p className="text-sm text-gray-600 mb-4">
-            All required activities completed. You can now upload additional documents or generate diagnosis at any time.
-          </p>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <button className="card hover:shadow-lg transition-all border-2 border-orange-200 bg-orange-50 text-left p-4">
-              <div className="flex items-start space-x-3">
-                <TestTube2 className="w-6 h-6 text-orange-600 flex-shrink-0" />
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Upload Test Results</h4>
-                  <p className="text-xs text-gray-600">Blood work, ECG, X-rays, etc.</p>
                 </div>
-              </div>
-            </button>
+            )}
 
-            <button className="card hover:shadow-lg transition-all border-2 border-red-200 bg-red-50 text-left p-4">
-              <div className="flex items-start space-x-3">
-                <Brain className="w-6 h-6 text-red-600 flex-shrink-0" />
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Generate Diagnosis</h4>
-                  <p className="text-xs text-gray-600">AI-powered insights & recommendations</p>
+            {/* Doctor's Diagnosis Section - Show after AI diagnosis is generated */}
+            {appointment.diagnosis_generated_at && (
+                <div className="card mt-6 border-2 border-green-200 bg-green-50">
+                    <div className="mb-6 border-b border-green-200 pb-5">
+                        <h3 className="text-2xl font-bold text-gray-900 flex items-center mb-2">
+                            <Stethoscope className="w-6 h-6 mr-3 text-green-600" />
+                            Doctor's Diagnosis
+                        </h3>
+                        <p className="text-base text-gray-700 mt-2">
+                            Provide your clinical diagnosis, notes, and supporting documents
+                        </p>
+                    </div>
+
+                    {/* Diagnosis Text Input */}
+                    <div className="mb-8">
+                        <label htmlFor="doctor-diagnosis-text" className="block text-lg font-bold text-gray-800 mb-3">
+                            Diagnosis Notes
+                        </label>
+                        <textarea
+                            id="doctor-diagnosis-text"
+                            value={doctorDiagnosisText}
+                            onChange={(e) => setDoctorDiagnosisText(e.target.value)}
+                            placeholder="Enter your clinical diagnosis, observations, treatment plan, and any additional notes..."
+                            className="w-full px-5 py-4 text-base border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-y min-h-[200px] leading-relaxed"
+                            rows={8}
+                            style={{ fontSize: '16px', lineHeight: '1.6' }}
+                        />
+                        <p className="text-sm text-gray-600 mt-2">
+                            Include your clinical assessment, differential diagnosis, treatment recommendations, and follow-up plans.
+                        </p>
+                    </div>
+
+                    {/* Diagnosis File Upload */}
+                    <div className="mb-8">
+                        <label className="block text-lg font-bold text-gray-800 mb-3">
+                            Supporting Documents
+                        </label>
+                        <p className="text-base text-gray-700 mb-4">
+                            Upload clinical notes, images, or other supporting documents for your diagnosis
+                        </p>
+                        <input
+                            type="file"
+                            id="doctor-diagnosis-files"
+                            multiple
+                            accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.dicom"
+                            onChange={handleDoctorDiagnosisFileUpload}
+                            className="hidden"
+                            disabled={uploadingDoctorDiagnosis}
+                        />
+                        <label
+                            htmlFor="doctor-diagnosis-files"
+                            className={`btn-secondary w-full flex items-center justify-center cursor-pointer py-3 text-base font-semibold ${uploadingDoctorDiagnosis ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                            {uploadingDoctorDiagnosis ? (
+                                <>
+                                    <Loader className="w-5 h-5 mr-3 animate-spin" />
+                                    Uploading...
+                                </>
+                            ) : (
+                                <>
+                                    <Upload className="w-5 h-5 mr-3" />
+                                    Upload Supporting Documents
+                                </>
+                            )}
+                        </label>
+
+                        {/* Display uploaded files */}
+                        {doctorDiagnosisFiles.length > 0 && (
+                            <div className="mt-5">
+                                <h4 className="text-base font-bold text-gray-800 mb-3">Uploaded Files:</h4>
+                                <div className="space-y-3">
+                                    {doctorDiagnosisFiles.map((file, idx) => (
+                                        <div key={idx} className="flex items-center justify-between bg-white border-2 border-gray-200 rounded-lg p-4 hover:border-green-300 transition-colors">
+                                            <div className="flex items-center space-x-3 overflow-hidden flex-1">
+                                                <FileText className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                                                <span className="text-base text-gray-800 truncate font-medium" title={file.name}>
+                                                    {file.name}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center space-x-3 ml-4">
+                                                {file.uri ? (
+                                                    <a
+                                                        href={file.uri}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded transition-colors"
+                                                        title="View Document"
+                                                    >
+                                                        <Eye className="w-5 h-5" />
+                                                    </a>
+                                                ) : (
+                                                    <CheckCircle className="w-5 h-5 text-green-600" />
+                                                )}
+                                                <button
+                                                    onClick={() => {
+                                                        setDoctorDiagnosisFiles(prev => prev.filter((_, i) => i !== idx));
+                                                    }}
+                                                    className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded transition-colors text-xl font-bold"
+                                                    title="Remove File"
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Save Button */}
+                    <div className="flex justify-end space-x-4 pt-5 border-t-2 border-green-200">
+                        <button
+                            onClick={() => {
+                                setDoctorDiagnosisText('');
+                                setDoctorDiagnosisFiles([]);
+                            }}
+                            className="btn-secondary px-6 py-3 text-base font-semibold"
+                        >
+                            Clear
+                        </button>
+                        <button
+                            onClick={handleSaveDoctorDiagnosis}
+                            disabled={!doctorDiagnosisText.trim() && doctorDiagnosisFiles.length === 0}
+                            className={`px-8 py-3 rounded-lg font-semibold transition-all flex items-center text-base ${doctorDiagnosisText.trim() || doctorDiagnosisFiles.length > 0
+                                    ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl'
+                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                }`}
+                        >
+                            <CheckCircle className="w-5 h-5 mr-2" />
+                            Save Diagnosis
+                        </button>
+                    </div>
                 </div>
-              </div>
-            </button>
+            )}
 
-            <button 
-              onClick={() => navigate(`/doctor/chat/${appointmentId}`)}
-              className="card hover:shadow-lg transition-all border-2 border-blue-200 bg-blue-50 text-left p-4"
-            >
-              <div className="flex items-start space-x-3">
-                <MessageSquare className="w-6 h-6 text-blue-600 flex-shrink-0" />
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Chat with AI</h4>
-                  <p className="text-xs text-gray-600">Ask questions about this case</p>
+
+            {/* Additional Actions - Only show after required activities */}
+            {requiredComplete && (
+                <div className="card bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4">Additional Actions</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                        All required activities completed. You can now upload additional documents or generate diagnosis at any time.
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <button className="card hover:shadow-lg transition-all border-2 border-orange-200 bg-orange-50 text-left p-4">
+                            <div className="flex items-start space-x-3">
+                                <TestTube2 className="w-6 h-6 text-orange-600 flex-shrink-0" />
+                                <div>
+                                    <h4 className="font-semibold text-gray-900 mb-1">Upload Test Results</h4>
+                                    <p className="text-xs text-gray-600">Blood work, ECG, X-rays, etc.</p>
+                                </div>
+                            </div>
+                        </button>
+
+                        <button className="card hover:shadow-lg transition-all border-2 border-red-200 bg-red-50 text-left p-4">
+                            <div className="flex items-start space-x-3">
+                                <Brain className="w-6 h-6 text-red-600 flex-shrink-0" />
+                                <div>
+                                    <h4 className="font-semibold text-gray-900 mb-1">Generate Diagnosis</h4>
+                                    <p className="text-xs text-gray-600">AI-powered insights & recommendations</p>
+                                </div>
+                            </div>
+                        </button>
+
+                        <button
+                            onClick={() => navigate(`/doctor/chat/${appointmentId}`)}
+                            className="card hover:shadow-lg transition-all border-2 border-blue-200 bg-blue-50 text-left p-4"
+                        >
+                            <div className="flex items-start space-x-3">
+                                <MessageSquare className="w-6 h-6 text-blue-600 flex-shrink-0" />
+                                <div>
+                                    <h4 className="font-semibold text-gray-900 mb-1">Chat with AI</h4>
+                                    <p className="text-xs text-gray-600">Ask questions about this case</p>
+                                </div>
+                            </div>
+                        </button>
+
+                        <button className="card hover:shadow-lg transition-all border-2 border-gray-200 bg-gray-50 text-left p-4">
+                            <div className="flex items-start space-x-3">
+                                <Plus className="w-6 h-6 text-gray-600 flex-shrink-0" />
+                                <div>
+                                    <h4 className="font-semibold text-gray-900 mb-1">Add Documents</h4>
+                                    <p className="text-xs text-gray-600">Any additional files or notes</p>
+                                </div>
+                            </div>
+                        </button>
+
+                        <button className="card hover:shadow-lg transition-all border-2 border-green-200 bg-green-50 text-left p-4">
+                            <div className="flex items-start space-x-3">
+                                <Download className="w-6 h-6 text-green-600 flex-shrink-0" />
+                                <div>
+                                    <h4 className="font-semibold text-gray-900 mb-1">Export All</h4>
+                                    <p className="text-xs text-gray-600">Download complete session record</p>
+                                </div>
+                            </div>
+                        </button>
+                    </div>
                 </div>
-              </div>
-            </button>
+            )}
 
-            <button className="card hover:shadow-lg transition-all border-2 border-gray-200 bg-gray-50 text-left p-4">
-              <div className="flex items-start space-x-3">
-                <Plus className="w-6 h-6 text-gray-600 flex-shrink-0" />
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Add Documents</h4>
-                  <p className="text-xs text-gray-600">Any additional files or notes</p>
-                </div>
-              </div>
-            </button>
-
-            <button className="card hover:shadow-lg transition-all border-2 border-green-200 bg-green-50 text-left p-4">
-              <div className="flex items-start space-x-3">
-                <Download className="w-6 h-6 text-green-600 flex-shrink-0" />
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Export All</h4>
-                  <p className="text-xs text-gray-600">Download complete session record</p>
-                </div>
-              </div>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Session Controls */}
-      <div className="card mt-6 bg-gray-50">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-gray-600">Session Status</p>
+            {/* Session Controls */}
+            <div className="card mt-6 bg-gray-50">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <p className="text-sm text-gray-600">Session Status</p>
                         <p className="text-lg font-semibold text-gray-900 capitalize">{appointment.status.split('_').join(' ')}</p>
-          </div>
-          <div className="flex space-x-3">
+                    </div>
+                    <div className="flex space-x-3">
                         <button
                             onClick={handlePauseSession}
                             className="btn-secondary flex items-center"
                         >
-              Pause Session
-            </button>
+                            Pause Session
+                        </button>
                         <button
                             onClick={handleEndSession}
                             className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors flex items-center"
                         >
                             <CheckCircle className="w-4 h-4 mr-2" />
-              End Session
-            </button>
-          </div>
+                            End Session
+                        </button>
+                    </div>
                 </div>
             </div>
 
