@@ -5,9 +5,10 @@ PDF text extraction utilities
 import tempfile
 import os
 from fastapi import UploadFile
+import PyPDF2
 
 
-async def extract_text_from_pdf_upload(file: UploadFile) -> str:
+async def extract_text_from_pdf_bytes(contents: bytes) -> str:
     """
     Extract text from an uploaded PDF file.
     
@@ -22,8 +23,7 @@ async def extract_text_from_pdf_upload(file: UploadFile) -> str:
         
         # Save uploaded file to temporary location
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-            content = await file.read()
-            tmp_file.write(content)
+            tmp_file.write(contents)
             tmp_file_path = tmp_file.name
         
         try:
@@ -42,12 +42,9 @@ async def extract_text_from_pdf_upload(file: UploadFile) -> str:
                 
     except ImportError:
         # Fallback if pdfplumber not installed
-        try:
-            import PyPDF2
-            
+        try:            
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-                content = await file.read()
-                tmp_file.write(content)
+                tmp_file.write(contents)
                 tmp_file_path = tmp_file.name
             
             try:

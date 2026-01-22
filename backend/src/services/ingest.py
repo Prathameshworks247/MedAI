@@ -1,8 +1,10 @@
 # routes/ingest.py
 
-from fastapi import APIRouter, UploadFile, Depends
+import io
+from bson import ObjectId
+from fastapi import APIRouter, UploadFile
 from src.services.llm_extractor import chain
-# from services.storage import upload_to_s3
+from src.r2 import upload_to_r2
 from src.services.storage import (
     update_appointment,
     update_patient,
@@ -10,7 +12,7 @@ from src.services.storage import (
     store_tests,
     store_time_series
 )
-from src.utils.pdf import extract_text_from_pdf_upload
+from src.utils.pdf import extract_text_from_pdf_bytes
 
 router = APIRouter()
 
@@ -21,7 +23,8 @@ async def ingest_document(
     file: UploadFile
 ):
     # 1️⃣ Extract text
-    text = await extract_text_from_pdf_upload(file)
+    contents = await file.read()
+    text = await extract_text_from_pdf_bytes(contents)
 
     # 2️⃣ LLM extraction
     result = chain.invoke({"document_text": text})
@@ -38,14 +41,17 @@ async def ingest_document(
         updates=result.patient_profile_updates
     )
 
-    # 5️⃣ Store reports
+    # 5️⃣ Store reportsfrom
     for report in result.reports:
-        # uri = upload_to_s3(file, report.file_name)
+        uri = upload_to_r2(io.BytesIO(contents), report.file_name)
+        print(uri)
+        report.uri = uri
         await store_reports(appointment_id, report)
 
     # 6️⃣ Store tests
     for test in result.tests:
-        # uri = upload_to_s3(file, test.file_name)
+        uri = upload_to_r2(io.BytesIO(contents), test.file_name)
+        test.uri = uri
         await store_tests(appointment_id, test)
 
     # 7️⃣ Time-series metrics

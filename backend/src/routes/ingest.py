@@ -3,13 +3,10 @@ Medical Data Ingestion Routes using LangChain Tools
 """
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Query
-from typing import Optional
 import tempfile
 import os
 
 from src.services.agent import process_medical_document
-from src.utils.pdf import extract_text_from_pdf_upload
-from src.services.tools import extract_clinical_info, save_to_mongo
 
 router = APIRouter()
 
@@ -41,7 +38,9 @@ async def ingest_document(
                 document_text=None,  # Will extract from PDF
                 patient_id=patient_id,
                 appointment_id=appointment_id,
-                file_path=tmp_file_path
+                file_path=tmp_file_path,
+                file_name=file.filename,
+                file_content=content
             )
             
             if result["errors"]:

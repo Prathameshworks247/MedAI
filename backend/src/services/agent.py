@@ -4,6 +4,9 @@ Uses a sequential pipeline approach compatible with Gemini
 """
 
 from typing import Optional
+import io
+
+from src.r2 import upload_to_r2
 from src.services.tools import extract_clinical_info, extract_text_from_pdf, _save_to_mongo_impl
 
 
@@ -13,6 +16,8 @@ async def process_medical_document(
     patient_id: str,
     appointment_id: str,
     file_path: Optional[str] | None = None,
+    file_name: Optional[str] | None = None,
+    file_content: bytes = b"",
     is_transcript: bool = False
 ) -> dict:
     """
@@ -38,8 +43,16 @@ async def process_medical_document(
         # Step 1: Extract text from PDF if file_path provided and no text
         if file_path and not document_text:
             try:
+                file_uri = upload_to_r2(io.BytesIO(file_content), file_name or "")
+                print(file_uri)
                 results["extracted_text"] = extract_text_from_pdf.invoke({"file_path": file_path})
-                document_text = results["extracted_text"]
+                document_text = f"""
+                file name: {file_name}
+                
+                file uri: {file_uri}
+
+                file content: {results["extracted_text"]}
+                """
             except Exception as e:
                 error_msg = f"Error extracting PDF text: {str(e)}"
                 results["errors"].append(error_msg)

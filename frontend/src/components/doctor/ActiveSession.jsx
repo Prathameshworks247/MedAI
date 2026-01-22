@@ -229,7 +229,7 @@ const UploadSection = ({ title, icon: Icon, colorClass, borderClass, accept, onU
                                         <Eye className="w-4 h-4" />
                                     </a>
                                 ) : (
-                                    <CheckCircle className="w-4 h-4 text-green-600" />
+                                    <CheckCircle className="w-4 h-4 text-green-600 mr-1" />
                                 )}
                     </div>
                   ))}
@@ -1056,7 +1056,6 @@ const ActiveSession = () => {
         );
     }
 
-    console.log(appointment);
     const session = appointment.session;
     // Check if finalized based on discussion length
     const isFinalized = (appointment?.discussion_summary && appointment?.discussion_summary.length > 0)
