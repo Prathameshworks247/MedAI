@@ -1,11 +1,13 @@
 # llm/schemas.py
 
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Literal
+from typing import List, Optional, Dict, Literal, Union, Any
 
 class LLMReport(BaseModel):
-    file_name: str
-    summary: str
+    doc_id: Optional[str] = None
+    doc_name: Optional[str] = "Unknown Document"
+    summary: Optional[str] = ""
+    uri: Optional[str] = None
 
 class LLMTestItem(BaseModel):
     """Individual test item"""
@@ -14,9 +16,10 @@ class LLMTestItem(BaseModel):
 
 class LLMTestDocument(BaseModel):
     """Test document containing multiple tests"""
-    doc_id: str
-    doc_name: str
-    summary: str
+    doc_id: Optional[str] = None
+    doc_name: Optional[str] = "Unknown Document"
+    summary: Optional[str] = ""
+    uri: Optional[str] = None
     tests: List[LLMTestItem]
 
 class TimeSeriesMetric(BaseModel):
@@ -24,11 +27,11 @@ class TimeSeriesMetric(BaseModel):
     value: float
     unit: str
     timestamp: str  # ISO8601 format
-    is_anamoly: bool = False  # True if value is outside normal range
+    is_anomaly: bool = False  # True if value is outside normal range
 
 class ExtractionResult(BaseModel):
-    appointment_updates: Dict
-    reports: List[LLMReport]
-    tests: List[LLMTestDocument]
-    patient_profile_updates: Dict
-    time_series_observations: List[TimeSeriesMetric]
+    appointment_updates: Dict[str, Any] = Field(default_factory=dict)
+    reports: List[LLMReport] = Field(default_factory=list)
+    tests: List[LLMTestDocument] = Field(default_factory=list)
+    patient_profile_updates: Union[Dict[str, Any], List[Any]] = Field(default_factory=dict)
+    time_series_observations: List[TimeSeriesMetric] = Field(default_factory=list)

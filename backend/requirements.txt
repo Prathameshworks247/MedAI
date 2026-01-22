@@ -14,3 +14,4 @@ pydantic
 langchain-community
 pydub
 pdfplumber
+boto3

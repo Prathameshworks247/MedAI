@@ -5,7 +5,7 @@ from typing import List, Literal
 
 class ReportModel(BaseModel):
     report_id: str = Field(...)
-    file_name: str = Field(...)
+    doc_name: str = Field(...)
     uri: str = Field(...) 
     summary: str = Field(...)
 

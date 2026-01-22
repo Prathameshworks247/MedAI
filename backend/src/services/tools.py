@@ -37,14 +37,24 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
             },
             "reports": [
                 {
-                    "file_name": str,
-                    "summary": str
+                    "doc_id": str,
+                    "doc_name": str,
+                    "summary": str,
+                    "uri": str
                 }
             ],
             "tests": [
                 {
-                    "file_name": str,
-                    "summary": str
+                    "doc_id": str,
+                    "doc_name": str,
+                    "summary": str,
+                    "uri": str,
+                    "tests": [
+                        {
+                            "name": str,
+                            "description": str
+                        }
+                    ]
                 }
             ],
             "patient_profile_updates": {
@@ -56,7 +66,7 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
                     "value": float,
                     "unit": str,     # e.g., "mmHg", "bpm", "°C", "mg/dL"
                     "timestamp": str,  # ISO8601 format
-                    "is_anamoly": bool  # True if value is outside normal range
+                    "is_anomaly": bool  # True if value is outside normal range
                 }
             ]
         }
@@ -69,6 +79,8 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
     system_message = """You are a clinical data extraction AI powered by Gemini.
 
     CRITICAL RULES:
+    - The input text may start with metadata headers: "file name: <name>" and "file uri: <uri>"
+    - ALWAYS extract these metadata values if present and use them to populate "doc_name" and "uri" fields in the output
     - Extract ONLY information that is explicitly present in the document
     - Do NOT invent, infer, or assume any values
     - If a field is not mentioned, use empty values (empty dict {{}}, empty list [], empty string "")
@@ -83,14 +95,20 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
     - status: Current appointment status (one of: scheduled, in_progress, paused, completed, cancelled)
 
     2. reports (array of objects):
-    - Each report object must have: "file_name" (string) and "summary" (string)
-    - Example: [{{"file_name": "name.pdf", "summary": "brief description"}}]
+    - Each report object must have: "doc_name" (string) and "summary" (string) and "uri" (string)
+    - IMPORTANT: Use the value from "file name:" header for "doc_name"
+    - IMPORTANT: Use the value from "file uri:" header for "uri"
+    - Example: [{{"doc_name": "lab_report.pdf", "summary": "brief description", "uri": "https://..."}}]
     - Only include if reports are mentioned in the document
 
     3. tests (array of test documents):
     - CRITICAL: Group ALL tests from the SAME document into ONE test document object
     - If only one PDF/document was uploaded, create ONLY ONE test document containing all tests
-    - Each test document must have: "doc_id" (string - use document ID if available, otherwise generate one), "doc_name" (string - name of the test report/document), "summary" (string - brief summary of all tests in this document), and "tests" (array)
+    - Each test document must have: "doc_id" (string), "doc_name" (string), "summary" (string), "uri" (string), and "tests" (array)
+    - IMPORTANT: Use the value from "file name:" header for "doc_name"
+    - IMPORTANT: Use the value from "file uri:" header for "uri"
+    - "doc_id" can be generated if not present
+    - "summary" should describe all tests in this document
     - Each test in the "tests" array must have: "name" (string - test name) and "description" (string - MUST contain the actual test value with unit, e.g., "46.00 mg/dL", "1.00 mg/L", "4 ng/L", "<20 mg/dL")
     - The description field MUST contain the numeric value and unit from the document - this is the actual test result
     - If a test value is not found, use empty string "" (NEVER use null)
@@ -108,11 +126,11 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
     5. time_series_observations (array of objects):
     - ONLY include if there are repeated measurements over time (vitals, lab trends, etc.)
     - Each observation MUST have ALL of these fields: "metric" (string), "value" (number), "unit" (string), "timestamp" (ISO8601 string), "is_anamoly" (boolean)
-    - CRITICAL: "is_anamoly" is REQUIRED for every time_series_observation. It MUST be included as a boolean value (true or false).
+    - CRITICAL: "is_anomaly" is REQUIRED for every time_series_observation. It MUST be included as a boolean value (true or false).
     - Allowed metric names: "blood_pressure", "heart_rate", "temperature", "glucose", "cholesterol", "hemoglobin", "wbc", "rbc", "platelets"
-    - "is_anamoly" should be true if the value is outside normal range, false otherwise
+    - "is_anomaly" should be true if the value is outside normal range, false otherwise
     - Normal ranges: blood_pressure (90-140/60-90), heart_rate (60-100 bpm), temperature (36.1-37.2°C), glucose (70-100 mg/dL fasting), cholesterol (<200 mg/dL), hemoglobin (12-16 g/dL), wbc (4-11 x10^9/L), rbc (4.5-5.5 x10^12/L), platelets (150-450 x10^9/L)
-    - Example: [{{"metric": "blood_pressure", "value": 145.0, "unit": "mmHg", "timestamp": "2025-01-11T10:30:00", "is_anamoly": true}}, {{"metric": "heart_rate", "value": 72.0, "unit": "bpm", "timestamp": "2025-01-11T10:30:00", "is_anamoly": false}}]
+    - Example: [{{"metric": "blood_pressure", "value": 145.0, "unit": "mmHg", "timestamp": "2025-01-11T10:30:00", "is_anomaly": true}}, {{"metric": "heart_rate", "value": 72.0, "unit": "bpm", "timestamp": "2025-01-11T10:30:00", "is_anomaly": false}}]
     - NOTE: Test results from lab reports should go in the "tests" array with values in "description", NOT in time_series_observations
     - Only use time_series_observations for actual time-series data (multiple measurements over time)
 
@@ -165,12 +183,12 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
                             if test_item.get("description") is None:
                                 test_item["description"] = ""
             
-            # Fix missing is_anamoly in time_series_observations
+            # Fix missing is_anomaly in time_series_observations
             if "time_series_observations" in result_dict:
                 for obs in result_dict["time_series_observations"]:
-                    if "is_anamoly" not in obs or obs.get("is_anamoly") is None:
-                        obs["is_anamoly"] = False
-                        print(f"🔧 Fixed: Added missing is_anamoly=False for {obs.get('metric', 'unknown')}")
+                    if "is_anomaly" not in obs or obs.get("is_anomaly") is None:
+                        obs["is_anomaly"] = False
+                        print(f"🔧 Fixed: Added missing is_anomaly=False for {obs.get('metric', 'unknown')}")
             
             # Re-validate with fixed data
             result_model = ExtractionResult.model_validate(result_dict)
@@ -206,13 +224,13 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
                     elif json_obj["patient_profile_updates"] is None:
                         json_obj["patient_profile_updates"] = {}
                 
-                # Fix missing is_anamoly in time_series_observations
+                # Fix missing is_anomaly in time_series_observations
                 if "time_series_observations" in json_obj:
                     for obs in json_obj["time_series_observations"]:
-                        if "is_anamoly" not in obs or obs.get("is_anamoly") is None:
+                        if "is_anomaly" not in obs or obs.get("is_anomaly") is None:
                             # Set default to False if missing
-                            obs["is_anamoly"] = False
-                            print(f"🔧 Fixed: Added missing is_anamoly=False for {obs.get('metric', 'unknown')}")
+                            obs["is_anomaly"] = False
+                            print(f"🔧 Fixed: Added missing is_anomaly=False for {obs.get('metric', 'unknown')}")
                 
                 # Create Pydantic model from fixed JSON
                 result_model = ExtractionResult.model_validate(json_obj)
@@ -239,10 +257,10 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
                             test_item["description"] = ""
                             print("🔧 Fixed: Converted null description to empty string (final check)")
         
-        # Final check: Ensure is_anamoly is present in time_series_observations
+        # Final check: Ensure is_anomaly is present in time_series_observations
         if "time_series_observations" in result:
             for obs in result["time_series_observations"]:
-                if "is_anamoly" not in obs or obs.get("is_anamoly") is None:
+                if "is_anomaly" not in obs or obs.get("is_anomaly") is None:
                     # Determine if value is anomalous based on metric and value
                     metric = obs.get("metric", "").lower()
                     value = obs.get("value", 0.0)
@@ -269,8 +287,8 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
                     elif metric == "platelets":
                         is_anomalous = value < 150 or value > 450
                     
-                    obs["is_anamoly"] = is_anomalous
-                    print(f"🔧 Fixed: Added is_anamoly={is_anomalous} for {metric} (value: {value})")
+                    obs["is_anomaly"] = is_anomalous
+                    print(f"🔧 Fixed: Added is_anomaly={is_anomalous} for {metric} (value: {value})")
         
         # Post-process: Merge test documents with the same doc_id
         if "tests" in result and len(result["tests"]) > 0:
@@ -282,6 +300,7 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
                         "doc_id": doc_id,
                         "doc_name": test_doc.get("doc_name", "Unknown Document"),
                         "summary": test_doc.get("summary", ""),
+                        "uri": test_doc.get("uri", ""),
                         "tests": []
                     }
                 # Merge tests from this document
@@ -451,6 +470,7 @@ async def _save_to_mongo_impl(
                     "doc_id": test_document.get("doc_id", str(ObjectId())),
                     "doc_name": test_document.get("doc_name", "unknown"),
                     "summary": test_document.get("summary", ""),
+                    "uri": test_document.get("uri", ""),
                     "tests": [
                         {
                             "name": test_item.get("name", ""),
@@ -559,7 +579,7 @@ async def _save_to_mongo_impl(
                 # Create MetricValue
                 metric_value = {
                     "value": obs.get("value", 0.0),
-                    "is_anamoly": obs.get("is_anamoly", False)
+                    "is_anomaly": obs.get("is_anomaly", False)
                 }
                 
                 # Initialize metric time series if it doesn't exist
