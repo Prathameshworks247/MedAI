@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { Search, User, Calendar, Download, Eye, Play, Upload, Clock, Stethoscope, Activity, FileText } from 'lucide-react';
+import { Search, User, Calendar, Download, Eye, Play, Upload, Clock, Stethoscope, Activity, FileText, Sparkles } from 'lucide-react';
 import { getPatientById } from '../../data/appointmentData';
 import { apiRequest } from '../../utils/api';
 import NewAppointmentModal from './NewAppointmentModal';
+import DiagnosisDashboard from '../diagnosis/Main';
 
 const PatientsPage = () => {
 const { user } = useAuth();
@@ -57,6 +58,7 @@ const { user } = useAuth();
             status: apt.status || 'scheduled',
             doctor: apt.doctor,
             patient: apt.patient,
+            diagnosis_generated_at: apt.diagnosis_generated_at,
             session: {
                 discussion: apt.discussion,
                 reports: apt.reports,
@@ -388,8 +390,26 @@ const { user } = useAuth();
                     </div>
                   )}
 
+                  {/* Generated Diagnosis */}
+                  {appointment.diagnosis_generated_at && session.generated_diagnosis && (
+                    <div className="mb-6 mt-8 border-2 border-indigo-100 bg-white rounded-lg p-4">
+                      <div className="mb-4 border-b border-gray-100 pb-4">
+                        <h6 className="text-lg font-bold text-gray-900 flex items-center">
+                          <Sparkles className="w-5 h-5 mr-2 text-indigo-600" />
+                          AI Diagnostic Analysis
+                        </h6>
+                        <p className="text-sm text-gray-500 mt-1">
+                          Comprehensive analysis generated on {new Date(appointment.diagnosis_generated_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <DiagnosisDashboard
+                        data={session.generated_diagnosis}
+                      />
+                    </div>
+                  )}
+
                   {/* Fallback if no details */}
-                  {!session.discussion && (!session.reports || session.reports.length === 0) && (!session.tests || session.tests.length === 0) && (
+                  {!session.discussion && (!session.reports || session.reports.length === 0) && (!session.tests || session.tests.length === 0) && !appointment.diagnosis_generated_at && (
                       <p className="text-sm text-gray-500 italic text-center py-4">No detailed session records available.</p>
                   )}
                 </div>
