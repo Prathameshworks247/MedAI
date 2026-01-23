@@ -55,8 +55,8 @@ const RequiredActivities = ({ session }) => (
 const RecordingSection = ({
     isRecording,
     isReviewing,
-    isFinalized,
     transcription,
+    discussion_summary,
     partialTranscript,
     isConnected,
     recordingDuration,
@@ -68,6 +68,7 @@ const RecordingSection = ({
     appointmentId,
     isFinalizing
 }) => {
+    const isFinalized = discussion_summary && discussion_summary.length > 0
     return (
         <div className="mb-6">
             {/* Live Transcription Display */}
@@ -633,7 +634,7 @@ const ActiveSession = () => {
                 if (!prev) return prev;
                 return {
                     ...prev,
-                    discussion_summary: response?.discussion_summary,
+                    discussion_summary: response.data.discussion_summary,
                     session: {
                         ...prev.session,
                         requiredCompleted: {
@@ -1093,8 +1094,6 @@ const ActiveSession = () => {
     }, [appointmentId]);
 
     const session = appointment?.session;
-    // Check if finalized based on discussion length
-    const isFinalized = useMemo(() => appointment?.discussion_summary && appointment?.discussion_summary.length > 0, [appointment])
     // Use local Logic or Helper.
     const requiredComplete = session?.requiredCompleted?.recording && session?.requiredCompleted?.documents && session?.requiredCompleted?.report;
 
@@ -1346,8 +1345,8 @@ const ActiveSession = () => {
             <RecordingSection
                 isRecording={isRecording}
                 isReviewing={isReviewing}
-                isFinalized={isFinalized}
                 transcription={transcription}
+                discussion_summary={appointment?.discussion_summary}
                 partialTranscript={partialTranscript}
                 isConnected={isConnected}
                 recordingDuration={recordingDuration}
