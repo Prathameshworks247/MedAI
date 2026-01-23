@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Square, Clock, CheckCircle, Upload, FileText, Brain, Download, Eye, Plus, Mic, FileCheck, TestTube2, Sparkles, MessageSquare, Loader, Calendar, Stethoscope, Activity } from 'lucide-react';
 import { ACTIVITY_TYPES } from '../../data/appointmentData';
@@ -65,7 +65,8 @@ const RecordingSection = ({
     onRedo,
     onFinalize,
     formatDuration,
-    appointmentId
+    appointmentId,
+    isFinalizing
 }) => {
     return (
         <div className="mb-6">
@@ -140,7 +141,7 @@ const RecordingSection = ({
             {/* Recording Controls */}
             {!isFinalized && (
                 <div className="mt-4">
-                    {!isRecording && !isReviewing ? (
+                    {!isRecording && transcription.length === 0 ? (
                         <button
                             onClick={onStart}
                             className="btn-primary flex items-center justify-center w-full"
@@ -167,10 +168,20 @@ const RecordingSection = ({
                             </button>
                             <button
                                 onClick={onFinalize}
-                                className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center flex-1"
+                                disabled={isFinalizing}
+                                className={`bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center flex-1 ${isFinalizing ? 'opacity-75 cursor-not-allowed' : ''}`}
                             >
-                                <CheckCircle className="w-4 h-4 mr-2" />
-                                Finalize Recording
+                                {isFinalizing ? (
+                                    <>
+                                        <Loader className="w-4 h-4 mr-2 animate-spin" />
+                                        Finalizing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckCircle className="w-4 h-4 mr-2" />
+                                        Finalize Recording
+                                    </>
+                                )}
                             </button>
                         </div>
                     )}
@@ -248,6 +259,7 @@ const ActiveSession = () => {
     const [appointment, setAppointment] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [isFinalizing, setIsFinalizing] = useState(false);
 
     const [expandedActivity, setExpandedActivity] = useState(null);
     const [expandedHistoryId, setExpandedHistoryId] = useState(null);
@@ -594,7 +606,7 @@ const ActiveSession = () => {
         }
     };
 
-    const handleFinalizeRecording = () => {
+    const handleFinalizeRecording = async () => {
         // Close WebSocket
         if (websocketRef.current) {
             console.log('Closing WebSocket connection');
@@ -604,21 +616,40 @@ const ActiveSession = () => {
         setIsConnected(false);
         setIsReviewing(false);
         setTranscriptRecorded(true);
+        setIsFinalizing(true);
 
-        // Update appointment locally to reflect completion
-        setAppointment(prev => {
-            if (!prev) return prev;
-            return {
-                ...prev,
-                session: {
-                    ...prev.session,
-                    requiredCompleted: {
-                        ...prev.session.requiredCompleted,
-                        recording: true
+        try {
+            // Call the finalize recording endpoint
+            const response = await apiRequest(`/appointments/${appointmentId}/finalize-recording`, {
+                method: 'POST'
+            });
+
+            if (response) {
+                console.log("Recording finalized successfully:", response);
+            }
+
+            // Update appointment locally to reflect completion and new summary
+            setAppointment(prev => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
+                    discussion_summary: response?.discussion_summary,
+                    session: {
+                        ...prev.session,
+                        requiredCompleted: {
+                            ...prev.session.requiredCompleted,
+                            recording: true
+                        }
                     }
-                }
-            };
-        });
+                };
+            });
+        } catch (error) {
+            console.error("Error finalizing recording:", error);
+            alert("Failed to finalize recording. Please try again.");
+            // Optionally revert state if needed, but for now we keep it simple
+        } finally {
+            setIsFinalizing(false);
+        }
     };
 
     const handleRedoRecording = async () => {
@@ -1061,6 +1092,12 @@ const ActiveSession = () => {
         }
     }, [appointmentId]);
 
+    const session = appointment?.session;
+    // Check if finalized based on discussion length
+    const isFinalized = useMemo(() => appointment?.discussion_summary && appointment?.discussion_summary.length > 0, [appointment])
+    // Use local Logic or Helper.
+    const requiredComplete = session?.requiredCompleted?.recording && session?.requiredCompleted?.documents && session?.requiredCompleted?.report;
+
 
     // Cleanup on unmount
     useEffect(() => {
@@ -1085,12 +1122,6 @@ const ActiveSession = () => {
             </div>
         );
     }
-
-    const session = appointment.session;
-    // Check if finalized based on discussion length
-    const isFinalized = (appointment?.discussion_summary && appointment?.discussion_summary.length > 0)
-    // Use local Logic or Helper.
-    const requiredComplete = session?.requiredCompleted?.recording && session?.requiredCompleted?.documents && session?.requiredCompleted?.report;
 
     const getStatusBadge = (status) => {
         const badges = {
@@ -1326,6 +1357,7 @@ const ActiveSession = () => {
                 onFinalize={handleFinalizeRecording}
                 formatDuration={formatDuration}
                 appointmentId={appointmentId}
+                isFinalizing={isFinalizing}
             />
 
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -1374,8 +1406,8 @@ const ActiveSession = () => {
                             onClick={handleGenerateDiagnosis}
                             disabled={!transcriptRecorded && !documentsUploaded || generatingDiagnosis}
                             className={`ml-4 px-6 py-3 rounded-lg font-semibold transition-all flex items-center ${(transcriptRecorded || documentsUploaded) && !generatingDiagnosis
-                                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg hover:shadow-xl'
-                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg hover:shadow-xl'
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                 }`}
                         >
                             {generatingDiagnosis ? (
@@ -1540,8 +1572,8 @@ const ActiveSession = () => {
                             onClick={handleSaveDoctorDiagnosis}
                             disabled={!doctorDiagnosisText.trim() && doctorDiagnosisFiles.length === 0}
                             className={`px-8 py-3 rounded-lg font-semibold transition-all flex items-center text-base ${doctorDiagnosisText.trim() || doctorDiagnosisFiles.length > 0
-                                    ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl'
-                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl'
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                 }`}
                         >
                             <CheckCircle className="w-5 h-5 mr-2" />
