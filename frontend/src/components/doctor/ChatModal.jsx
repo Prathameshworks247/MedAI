@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Bot, User, MessageSquare, Plus, ArrowLeft, History, Trash2 } from 'lucide-react';
+import { X, Send, Bot, User, MessageSquare, Plus, ArrowLeft, History, Trash2, Upload, FileText, Loader, Eye } from 'lucide-react';
 import { apiRequest } from '../../utils/api';
+import PDFViewer from './PDFViewer';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) => {
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -10,21 +13,49 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [pdfDocumentId, setPdfDocumentId] = useState(null);
+    const [uploadedPdf, setUploadedPdf] = useState(null);
+    const [uploadedPdfFile, setUploadedPdfFile] = useState(null); // Store the actual file object for viewing
+    const [uploadingPdf, setUploadingPdf] = useState(false);
+    const [showPdfViewer, setShowPdfViewer] = useState(false);
+    const [viewerPage, setViewerPage] = useState(1);
+    const [viewerCoordinates, setViewerCoordinates] = useState(null);
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
 
-    // Load chat histories from localStorage on mount
+    // Load chat histories from backend on mount
     useEffect(() => {
-        const stored = localStorage.getItem(`chatHistories_${appointmentId}`);
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored);
-                setChatHistories(parsed);
-            } catch (e) {
-                console.error('Error loading chat histories:', e);
-            }
+        if (isOpen && appointmentId) {
+            loadChatHistories();
         }
-    }, [appointmentId]);
+    }, [isOpen, appointmentId]);
+
+    const loadChatHistories = async () => {
+        try {
+            const response = await apiRequest(`/doctors/chat/history/${appointmentId}`, {
+                method: 'GET'
+            });
+            
+            if (response.success && Array.isArray(response.data)) {
+                const histories = response.data.map(chat => ({
+                    id: chat.chat_id,
+                    title: chat.title,
+                    messages: chat.messages.map(msg => ({
+                        role: msg.role,
+                        content: msg.content,
+                        timestamp: chat.updated_at
+                    })),
+                    createdAt: chat.created_at,
+                    updatedAt: chat.updated_at
+                }));
+                setChatHistories(histories);
+                console.log(`✅ Loaded ${histories.length} chat histories from backend`);
+            }
+        } catch (error) {
+            console.error('Error loading chat histories:', error);
+            // Fallback to empty array on error
+            setChatHistories([]);
+        }
+    };
 
     // Auto-scroll to bottom when messages change
     useEffect(() => {
@@ -38,40 +69,68 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
         }
     }, [isOpen, isHistoryOpen]);
 
-    // Save chat history to localStorage
-    const saveChatHistory = (chatId, chatMessages, title) => {
-        const history = {
-            id: chatId,
-            title: title || `Chat ${new Date().toLocaleString()}`,
-            messages: chatMessages,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-        };
+    // Save chat history to backend
+    const saveChatHistory = async (chatId, chatMessages, title) => {
+        try {
+            const history = {
+                chat_id: chatId,
+                appointment_id: appointmentId,
+                patient_id: patientId,
+                title: title || `Chat ${new Date().toLocaleString()}`,
+                messages: chatMessages.map(msg => ({
+                    role: msg.role,
+                    content: msg.content
+                }))
+            };
 
-        const updated = [...chatHistories];
-        const existingIndex = updated.findIndex(h => h.id === chatId);
-        
-        if (existingIndex >= 0) {
-            updated[existingIndex] = history;
-        } else {
-            updated.unshift(history);
+            const response = await apiRequest('/doctors/chat/history', {
+                method: 'POST',
+                body: JSON.stringify(history)
+            });
+
+            if (response.success) {
+                // Update local state
+                const savedHistory = {
+                    id: response.data.chat_id,
+                    title: response.data.title,
+                    messages: response.data.messages.map(msg => ({
+                        role: msg.role,
+                        content: msg.content,
+                        timestamp: response.data.updated_at
+                    })),
+                    createdAt: response.data.created_at,
+                    updatedAt: response.data.updated_at
+                };
+
+                const updated = [...chatHistories];
+                const existingIndex = updated.findIndex(h => h.id === chatId);
+                
+                if (existingIndex >= 0) {
+                    updated[existingIndex] = savedHistory;
+                } else {
+                    updated.unshift(savedHistory);
+                }
+
+                // Keep only last 50 chats (backend already limits to 50)
+                const limited = updated.slice(0, 50);
+                setChatHistories(limited);
+                console.log(`✅ Chat history saved to backend: ${chatId}`);
+            }
+        } catch (error) {
+            console.error('Error saving chat history to backend:', error);
+            // Don't fail silently - could show a toast notification
         }
-
-        // Keep only last 20 chats
-        const limited = updated.slice(0, 20);
-        setChatHistories(limited);
-        localStorage.setItem(`chatHistories_${appointmentId}`, JSON.stringify(limited));
     };
 
     // Start new chat
-    const handleNewChat = () => {
-        // Save current chat if it has messages
-        if (currentChatId && messages.length > 0) {
+    const handleNewChat = async () => {
+        // Save current chat if it has messages (backend already saved messages, but we update title if needed)
+        if (currentChatId && messages.length > 1) { // More than just welcome message
             const title = messages.find(m => m.role === 'user')?.content?.substring(0, 50) || 'New Chat';
-            saveChatHistory(currentChatId, messages, title);
+            await saveChatHistory(currentChatId, messages, title);
         }
 
-        const newChatId = `chat_${Date.now()}`;
+        const newChatId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         setCurrentChatId(newChatId);
         setMessages([
             {
@@ -85,30 +144,117 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
     };
 
     // Load a chat from history
-    const handleLoadChat = (chatId) => {
-        // Save current chat if it has messages
-        if (currentChatId && messages.length > 0) {
+    const handleLoadChat = async (chatId) => {
+        // Save current chat if it has messages (backend already saved, but update title)
+        if (currentChatId && messages.length > 1) { // More than just welcome message
             const title = messages.find(m => m.role === 'user')?.content?.substring(0, 50) || 'New Chat';
-            saveChatHistory(currentChatId, messages, title);
+            await saveChatHistory(currentChatId, messages, title);
         }
 
         const chat = chatHistories.find(h => h.id === chatId);
         if (chat) {
             setCurrentChatId(chat.id);
-            setMessages(chat.messages);
+            // Convert messages to format expected by component
+            const formattedMessages = chat.messages.map(msg => ({
+                role: msg.role,
+                content: msg.content,
+                timestamp: msg.timestamp || chat.updatedAt
+            }));
+            setMessages(formattedMessages);
             setIsHistoryOpen(false);
+        } else {
+            // Chat not in local state, reload from backend
+            await loadChatHistories();
+            const refreshedChat = chatHistories.find(h => h.id === chatId);
+            if (refreshedChat) {
+                setCurrentChatId(refreshedChat.id);
+                const formattedMessages = refreshedChat.messages.map(msg => ({
+                    role: msg.role,
+                    content: msg.content,
+                    timestamp: msg.timestamp || refreshedChat.updatedAt
+                }));
+                setMessages(formattedMessages);
+                setIsHistoryOpen(false);
+            }
+        }
+    };
+
+    // Handle PDF upload for chatbot
+    const handlePdfUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!file.name.endsWith('.pdf')) {
+            alert('Please upload a PDF file');
+            e.target.value = '';
+            return;
+        }
+
+        setUploadingPdf(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const token = localStorage.getItem('access_token');
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`${API_BASE_URL}/doctors/upload-pdf`, {
+                method: 'POST',
+                body: formData,
+                headers: headers
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.detail || 'Failed to upload PDF');
+            }
+
+            setPdfDocumentId(data.document_id);
+            setUploadedPdf({
+                document_id: data.document_id,
+                file_name: data.file_name,
+                total_chunks: data.total_chunks,
+                total_pages: data.total_pages
+            });
+            setUploadedPdfFile(file); // Store the file object for viewing
+
+            alert(`PDF uploaded successfully! ${data.total_chunks} chunks from ${data.total_pages} pages. You can now ask questions about this document.`);
+        } catch (error) {
+            console.error('Error uploading PDF:', error);
+            alert(`Error uploading PDF: ${error.message}`);
+        } finally {
+            setUploadingPdf(false);
+            e.target.value = '';
         }
     };
 
     // Delete a chat from history
-    const handleDeleteChat = (chatId, e) => {
+    const handleDeleteChat = async (chatId, e) => {
         e.stopPropagation();
-        const updated = chatHistories.filter(h => h.id !== chatId);
-        setChatHistories(updated);
-        localStorage.setItem(`chatHistories_${appointmentId}`, JSON.stringify(updated));
         
-        if (currentChatId === chatId) {
-            handleNewChat();
+        try {
+            const response = await apiRequest(`/doctors/chat/history/${chatId}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.success) {
+                const updated = chatHistories.filter(h => h.id !== chatId);
+                setChatHistories(updated);
+                console.log(`✅ Chat history deleted: ${chatId}`);
+                
+                if (currentChatId === chatId) {
+                    handleNewChat();
+                }
+            } else {
+                throw new Error(response.error || 'Failed to delete chat');
+            }
+        } catch (error) {
+            console.error('Error deleting chat history:', error);
+            alert(`Failed to delete chat: ${error.message}`);
         }
     };
 
@@ -125,16 +271,20 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
         };
 
         // Initialize chat if needed
-        if (!currentChatId) {
-            const newChatId = `chat_${Date.now()}`;
-            setCurrentChatId(newChatId);
-            setMessages([
-                {
-                    role: 'assistant',
-                    content: `Hello! I'm your AI assistant for ${patientName || 'this patient'}'s appointment. How can I help you today?`,
-                    timestamp: new Date().toISOString(),
-                }
-            ]);
+        let chatIdToUse = currentChatId;
+        if (!chatIdToUse) {
+            chatIdToUse = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            setCurrentChatId(chatIdToUse);
+            // Add welcome message if this is a new chat
+            if (messages.length === 0) {
+                setMessages([
+                    {
+                        role: 'assistant',
+                        content: `Hello! I'm your AI assistant for ${patientName || 'this patient'}'s appointment. I have access to patient consultation recordings, clinical notes, reports, appointment history, and test results. How can I help you today?`,
+                        timestamp: new Date().toISOString(),
+                    }
+                ]);
+            }
         }
 
         setMessages(prev => [...prev, userMessage]);
@@ -154,7 +304,8 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                     patient_id: patientId,
                     appointment_id: appointmentId,
                     conversation_history: recentHistory,
-                    pdf_document_id: pdfDocumentId
+                    pdf_document_id: pdfDocumentId,
+                    chat_id: chatIdToUse  // Include chat_id so backend can save messages
                 })
             });
 
@@ -169,11 +320,22 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                 };
                 setMessages(prev => {
                     const updated = [...prev, assistantMessage];
-                    // Auto-save after assistant response
-                    const title = question.substring(0, 50);
-                    saveChatHistory(currentChatId, updated, title);
+                    // Messages are already saved by backend when chat_id is provided
+                    // Only manually save if backend didn't save (shouldn't happen)
                     return updated;
                 });
+                
+                // Update chat_id if backend returned one (should match what we sent)
+                if (response.data.chat_id && response.data.chat_id !== chatIdToUse) {
+                    setCurrentChatId(response.data.chat_id);
+                } else if (chatIdToUse && chatIdToUse !== currentChatId) {
+                    setCurrentChatId(chatIdToUse);
+                }
+                
+                // Refresh chat histories to show updated list
+                if (isHistoryOpen) {
+                    loadChatHistories();
+                }
             } else {
                 throw new Error(response.error || 'Chat request failed');
             }
@@ -195,7 +357,7 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
     // Initialize with new chat if no current chat
     useEffect(() => {
         if (isOpen && !currentChatId && messages.length === 0) {
-            const newChatId = `chat_${Date.now()}`;
+            const newChatId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             setCurrentChatId(newChatId);
             setMessages([
                 {
@@ -355,12 +517,45 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                                                 {message.citations && message.citations.length > 0 && (
                                                     <div className="mt-2 pt-2 border-t border-gray-300">
                                                         <p className="text-xs font-semibold mb-1">Sources:</p>
-                                                        {message.citations.map((citation, idx) => (
-                                                            <p key={idx} className="text-xs text-gray-600">
-                                                                • {citation.page_number && `Page ${citation.page_number}`}
-                                                                {citation.text_preview && `: ${citation.text_preview.substring(0, 100)}...`}
-                                                            </p>
-                                                        ))}
+                                                        <div className="space-y-1">
+                                                            {message.citations.map((citation, idx) => (
+                                                                <div
+                                                                    key={idx}
+                                                                    onClick={() => {
+                                                                        if (uploadedPdfFile && citation.page_number) {
+                                                                            setViewerPage(citation.page_number);
+                                                                            setViewerCoordinates(citation.coordinates || null);
+                                                                            setShowPdfViewer(true);
+                                                                        }
+                                                                    }}
+                                                                    className={`text-xs bg-white/50 rounded p-2 transition-colors border border-transparent ${
+                                                                        uploadedPdfFile && citation.page_number
+                                                                            ? 'hover:bg-blue-50 cursor-pointer hover:border-blue-300'
+                                                                            : 'text-gray-600'
+                                                                    }`}
+                                                                    title={uploadedPdfFile && citation.page_number ? "Click to view in PDF" : "PDF not available"}
+                                                                >
+                                                                    <div className="flex items-start justify-between gap-2">
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <p className="font-semibold flex items-center">
+                                                                                <FileText className="w-3 h-3 mr-1 flex-shrink-0" />
+                                                                                <span className="truncate">
+                                                                                    {citation.page_number ? `Page ${citation.page_number}` : 'Citation'}
+                                                                                </span>
+                                                                            </p>
+                                                                            {citation.text_preview && (
+                                                                                <p className="text-gray-600 break-words mt-1 line-clamp-2">
+                                                                                    {citation.text_preview}
+                                                                                </p>
+                                                                            )}
+                                                                        </div>
+                                                                        {uploadedPdfFile && citation.page_number && (
+                                                                            <Eye className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
@@ -394,16 +589,58 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
 
                             {/* Input Area */}
                             <form onSubmit={handleSend} className="p-4 border-t border-gray-200">
+                                {uploadedPdf && (
+                                    <div className="mb-2 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                                        <div className="flex items-center space-x-2">
+                                            <FileText className="w-4 h-4 text-blue-600" />
+                                            <span className="text-sm text-blue-700 font-medium">{uploadedPdf.file_name}</span>
+                                            <span className="text-xs text-blue-600">({uploadedPdf.total_pages} pages)</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setPdfDocumentId(null);
+                                                setUploadedPdf(null);
+                                                setUploadedPdfFile(null);
+                                            }}
+                                            className="text-red-600 hover:text-red-800 font-bold text-lg"
+                                            title="Clear PDF"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                )}
                                 <div className="flex items-center space-x-2">
                                     <input
                                         ref={inputRef}
                                         type="text"
                                         value={input}
                                         onChange={(e) => setInput(e.target.value)}
-                                        placeholder="Type your message..."
+                                        placeholder={uploadedPdf ? "Ask a question about the uploaded PDF..." : "Type your message..."}
                                         className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                                         disabled={isLoading}
                                     />
+                                    <input
+                                        type="file"
+                                        accept=".pdf"
+                                        onChange={handlePdfUpload}
+                                        disabled={uploadingPdf || isLoading}
+                                        className="hidden"
+                                        id="pdf-upload-chat-modal"
+                                    />
+                                    <label
+                                        htmlFor="pdf-upload-chat-modal"
+                                        className={`p-2 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors flex items-center justify-center ${
+                                            uploadingPdf || isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                                        } ${uploadedPdf ? 'bg-blue-50 border-blue-300' : ''}`}
+                                        title={uploadedPdf ? `PDF: ${uploadedPdf.file_name}` : "Upload PDF for chat context"}
+                                    >
+                                        {uploadingPdf ? (
+                                            <Loader className="w-5 h-5 animate-spin text-gray-600" />
+                                        ) : (
+                                            <Upload className={`w-5 h-5 ${uploadedPdf ? 'text-blue-600' : 'text-gray-600'}`} />
+                                        )}
+                                    </label>
                                     <button
                                         type="submit"
                                         disabled={!input.trim() || isLoading}
@@ -417,6 +654,19 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                     )}
                 </div>
             </div>
+
+            {/* PDF Viewer Modal */}
+            {showPdfViewer && uploadedPdfFile && (
+                <PDFViewer
+                    pdfFile={uploadedPdfFile}
+                    pageNumber={viewerPage}
+                    coordinates={viewerCoordinates}
+                    onClose={() => {
+                        setShowPdfViewer(false);
+                        setViewerCoordinates(null);
+                    }}
+                />
+            )}
         </div>
     );
 };

@@ -25,6 +25,7 @@ try:
     
     appointment_collection = db.get_collection("appointments")
     user_collection = db.get_collection("users")
+    chat_history_collection = db.get_collection("chat_histories")
 except Exception as e:
     print(f"Error connecting to MongoDB: {e}")
     raise
