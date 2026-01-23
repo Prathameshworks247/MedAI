@@ -7,7 +7,7 @@ from src.db import user_collection
 from src.middlewares.auth import check_doctor_exists
 from src.services.chatbot_intent import classify_intent
 from src.services.chatbot_context import build_chatbot_context, verify_doctor_patient_access
-from src.services.chatbot_prompts import build_chatbot_prompt
+from src.services.chatbot_prompts import build_chatbot_prompt_async
 from src.services.pdf_rag import pdf_rag_service, FAISS_AVAILABLE
 from src.llm.featherless import llm
 
@@ -170,7 +170,7 @@ async def doctor_chat(
         # Step 4: Build prompt with strict anti-hallucination instructions and conversation history
         if pdf_context:
             # Use PDF context only
-            prompt = build_chatbot_prompt(
+            prompt = await build_chatbot_prompt_async(
                 intent="pdf_query",
                 context={"pdf_context": pdf_context},
                 question=question,
@@ -183,7 +183,7 @@ async def doctor_chat(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Failed to build context"
                 )
-            prompt = build_chatbot_prompt(
+            prompt = await build_chatbot_prompt_async(
                 intent=intent,
                 context=context["data"],
                 question=question,

@@ -5,7 +5,6 @@ import { useAuth } from '../contexts/AuthContext';
 import DoctorDashboard from '../components/doctor/DoctorDashboard';
 import PatientsPage from '../components/doctor/PatientsPage';
 import ActiveSession from '../components/doctor/ActiveSession';
-import ChatWithAI from '../components/doctor/ChatWithAI';
 
 const DoctorPortal = () => {
     const location = useLocation();
@@ -79,7 +78,6 @@ const DoctorPortal = () => {
                         <Route index element={<DoctorDashboard />} />
                         <Route path="patients" element={<PatientsPage />} />
                         <Route path="session/:appointmentId" element={<ActiveSession />} />
-                        <Route path="chat/:appointmentId" element={<ChatWithAI />} />
                     </Routes>
                 </main>
             </div>

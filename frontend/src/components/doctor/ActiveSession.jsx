@@ -5,6 +5,7 @@ import { ACTIVITY_TYPES } from '../../data/appointmentData';
 import { apiRequest } from '../../utils/api';
 import DiagnosisDashboard from '../diagnosis/Main';
 import PDFViewer from './PDFViewer';
+import ChatButton from './ChatButton';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -267,10 +268,6 @@ const ActiveSession = () => {
     const [uploadedFiles, setUploadedFiles] = useState([]); // Keep for backward compatibility or general files
     const [uploading, setUploading] = useState(false);
 
-    // Chat state
-    const [chatMessages, setChatMessages] = useState([]);
-    const [chatInput, setChatInput] = useState('');
-    const [chatLoading, setChatLoading] = useState(false);
     const [pdfDocumentId, setPdfDocumentId] = useState(null);
     const [uploadedPdf, setUploadedPdf] = useState(null);
     const [uploadedPdfFile, setUploadedPdfFile] = useState(null); // Store the actual file object
@@ -810,68 +807,6 @@ const ActiveSession = () => {
         }
     };
 
-    // Handle chat submission
-    const handleChatSubmit = async (e) => {
-        e.preventDefault();
-        if (!chatInput.trim() || chatLoading) return;
-
-        const question = chatInput.trim();
-        const patientId = appointment?.patientId || appointment?.patient?.id || appointment?.patient_id;
-
-        if (!patientId) {
-            alert('Patient ID not found');
-            return;
-        }
-
-        // Add user message to chat
-        const userMessage = { role: 'user', content: question };
-        setChatMessages(prev => [...prev, userMessage]);
-        setChatInput('');
-        setChatLoading(true);
-
-        try {
-            // Prepare conversation history (last 5 messages to avoid token limits)
-            // Reduced from 10 to 5 to stay within model's 4096 token limit
-            const recentHistory = chatMessages.slice(-5).map(msg => ({
-                role: msg.role,
-                content: msg.content
-            }));
-
-            const response = await apiRequest('/doctors/chat', {
-                method: 'POST',
-                body: JSON.stringify({
-                    question: question,
-                    patient_id: patientId,
-                    appointment_id: appointmentId,
-                    conversation_history: recentHistory,
-                    pdf_document_id: pdfDocumentId  // Include PDF document ID if available
-                })
-            });
-
-            if (response.success) {
-                const assistantMessage = {
-                    role: 'assistant',
-                    content: response.data.answer,
-                    intent: response.data.intent,
-                    confidence: response.data.confidence,
-                    citations: response.data.citations || []
-                };
-                setChatMessages(prev => [...prev, assistantMessage]);
-            } else {
-                throw new Error(response.error || 'Chat request failed');
-            }
-        } catch (error) {
-            console.error('Error sending chat message:', error);
-            const errorMessage = {
-                role: 'assistant',
-                content: `Error: ${error.message || 'Failed to get response from AI assistant'}`,
-                error: true
-            };
-            setChatMessages(prev => [...prev, errorMessage]);
-        } finally {
-            setChatLoading(false);
-        }
-    };
 
     const handlePauseSession = async () => {
         if (isRecording) {
@@ -1459,154 +1394,6 @@ const ActiveSession = () => {
                 </div>
             )}
 
-            {/* Chat Section - Show after documents are uploaded */}
-            {documentsUploaded && (
-                <div className="mt-6 card bg-blue-50 border-2 border-blue-300">
-                    <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-                        <MessageSquare className="w-5 h-5 mr-2 text-blue-600" />
-                        AI Chat Assistant
-                    </h3>
-                    <div className="flex items-center justify-between mb-4">
-                        <p className="text-sm text-gray-600">
-                            Ask questions about this appointment, patient history, test results, or diagnosis.
-                        </p>
-                        {uploadedPdf && (
-                            <div className="flex items-center space-x-2 text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full">
-                                <FileText className="w-3 h-3" />
-                                <span className="font-semibold">{uploadedPdf.file_name}</span>
-                                <button
-                                    onClick={() => {
-                                        setPdfDocumentId(null);
-                                        setUploadedPdf(null);
-                                        setUploadedPdfFile(null);
-                                    }}
-                                    className="ml-2 text-red-600 hover:text-red-800 font-bold"
-                                    title="Clear PDF"
-                                >
-                                    ×
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Chat Messages */}
-                    <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4 max-h-96 overflow-y-auto">
-                        {chatMessages.length === 0 ? (
-                            <div className="text-center text-gray-500 py-8">
-                                <MessageSquare className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                                <p className="text-sm">Start a conversation by asking a question</p>
-                            </div>
-                        ) : (
-                            <div className="space-y-4">
-                                {chatMessages.map((msg, idx) => (
-                                    <div
-                                        key={idx}
-                                        className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                                    >
-                                        <div
-                                            className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user'
-                                                ? 'bg-blue-600 text-white'
-                                                : 'bg-gray-100 text-gray-900'
-                                                }`}
-                                        >
-                                            <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                                            {msg.intent && (
-                                                <p className="text-xs mt-2 opacity-75">
-                                                    Intent: {msg.intent} (confidence: {(msg.confidence * 100).toFixed(0)}%)
-                                                </p>
-                                            )}
-                                            {msg.citations && msg.citations.length > 0 && (
-                                                <div className="mt-3 pt-3 border-t border-gray-300">
-                                                    <p className="text-xs font-semibold mb-2">Citations:</p>
-                                                    <div className="space-y-1">
-                                                        {msg.citations.map((citation, idx) => (
-                                                            <div
-                                                                key={idx}
-                                                                className="text-xs bg-white/50 rounded p-2 hover:bg-blue-50 cursor-pointer transition-colors border border-transparent hover:border-blue-300 overflow-hidden"
-                                                                onClick={() => {
-                                                                    if (uploadedPdfFile) {
-                                                                        setViewerPage(citation.page_number);
-                                                                        setViewerCoordinates(citation.coordinates);
-                                                                        setShowPdfViewer(true);
-                                                                    }
-                                                                }}
-                                                                title="Click to view in PDF"
-                                                            >
-                                                                <div className="flex items-start justify-between gap-2">
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <p className="font-semibold flex items-center">
-                                                                            <FileText className="w-3 h-3 mr-1 flex-shrink-0" />
-                                                                            <span className="truncate">Page {citation.page_number}</span>
-                                                                        </p>
-                                                                        <p className="text-gray-600 break-words mt-1 line-clamp-2">{citation.text_preview}</p>
-                                                                    </div>
-                                                                    <Eye className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                                {chatLoading && (
-                                    <div className="flex justify-start">
-                                        <div className="bg-gray-100 rounded-lg p-3">
-                                            <Loader className="w-4 h-4 animate-spin text-gray-600" />
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Chat Input */}
-                    <form onSubmit={handleChatSubmit} className="flex space-x-2">
-                        <input
-                            type="text"
-                            value={chatInput}
-                            onChange={(e) => setChatInput(e.target.value)}
-                            placeholder={uploadedPdf ? "Ask a question about the uploaded PDF..." : "Ask a question about this appointment..."}
-                            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            disabled={chatLoading}
-                        />
-                        <input
-                            type="file"
-                            accept=".pdf"
-                            onChange={handlePdfUpload}
-                            disabled={uploadingPdf || chatLoading}
-                            className="hidden"
-                            id="pdf-upload-chat"
-                        />
-                        <label
-                            htmlFor="pdf-upload-chat"
-                            className={`btn-secondary flex items-center justify-center cursor-pointer px-3 py-2 ${uploadingPdf || chatLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            title={uploadedPdf ? `PDF: ${uploadedPdf.file_name}` : "Upload PDF for chat context"}
-                        >
-                            {uploadingPdf ? (
-                                <Loader className="w-4 h-4 animate-spin" />
-                            ) : (
-                                <Upload className={`w-4 h-4 ${uploadedPdf ? 'text-blue-600' : ''}`} />
-                            )}
-                        </label>
-                        <button
-                            type="submit"
-                            disabled={!chatInput.trim() || chatLoading}
-                            className="btn-primary flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {chatLoading ? (
-                                <Loader className="w-4 h-4 animate-spin" />
-                            ) : (
-                                <>
-                                    <MessageSquare className="w-4 h-4 mr-2" />
-                                    Send
-                                </>
-                            )}
-                        </button>
-                    </form>
-                </div>
-            )}
 
             {/* Diagnostic Insights - Show if generated */}
 
@@ -1794,18 +1581,6 @@ const ActiveSession = () => {
                             </div>
                         </button>
 
-                        <button
-                            onClick={() => navigate(`/doctor/chat/${appointmentId}`)}
-                            className="card hover:shadow-lg transition-all border-2 border-blue-200 bg-blue-50 text-left p-4"
-                        >
-                            <div className="flex items-start space-x-3">
-                                <MessageSquare className="w-6 h-6 text-blue-600 flex-shrink-0" />
-                                <div>
-                                    <h4 className="font-semibold text-gray-900 mb-1">Chat with AI</h4>
-                                    <p className="text-xs text-gray-600">Ask questions about this case</p>
-                                </div>
-                            </div>
-                        </button>
 
                         <button className="card hover:shadow-lg transition-all border-2 border-gray-200 bg-gray-50 text-left p-4">
                             <div className="flex items-start space-x-3">
@@ -1865,6 +1640,15 @@ const ActiveSession = () => {
                         setShowPdfViewer(false);
                         setViewerCoordinates(null);
                     }}
+                />
+            )}
+
+            {/* Chat Button - Floating */}
+            {appointment && (
+                <ChatButton
+                    appointmentId={appointmentId}
+                    patientId={appointment.patientId || appointment.patient?.id || appointment.patient_id}
+                    patientName={appointment.patient?.name || appointment.patientName}
                 />
             )}
         </div>
