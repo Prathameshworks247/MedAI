@@ -91,7 +91,7 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
     1. appointment_updates (dict):
     - chief_complaint: Main reason for visit (string)
     - diagnosis: Structured diagnosis object with codes, descriptions (dict)
-    - discussion_summary: Brief summary of consultation (string)
+    - discussion_summary: Brief summary of consultation (string). ONLY update this if a discussion is explicitly passed in the document_text. DO NOT generate a summary from reports or tests.
     - status: Current appointment status (one of: scheduled, in_progress, paused, completed, cancelled)
 
     2. reports (array of objects):

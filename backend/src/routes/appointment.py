@@ -8,7 +8,8 @@ from src.middlewares.auth import check_doctor_exists
 from src.db import appointment_collection, user_collection
 from src.services.streaming_stt import StreamingTranscriber
 from src.services.whisper_service import transcribe_audio_file
-from src.services.agent import process_medical_document
+
+from src.services.tools import extract_clinical_info, _save_to_mongo_impl
 from src.services.diagnosis_generator import generate_diagnosis, build_diagnosis_context, convert_med42_to_structured_json
 from src.services.chatbot_context import verify_doctor_patient_access
 
@@ -493,37 +494,7 @@ async def live_detection(websocket: WebSocket):
 
             # Save final discussion to appointment
             if final_text:
-                await save_discussion_to_appointment(final_text, is_final=True)
-                
-                # Process transcript through LLM extraction pipeline
-                if appointment_object_id:
-                    try:
-                        # Get appointment to extract patient_id
-                        appointment = await appointment_collection.find_one({"_id": appointment_object_id})
-                        if appointment and appointment.get("patient_id") and appointment_id:
-                            patient_id = appointment["patient_id"]
-                            print(f"🔄 Processing transcript through LLM extraction pipeline...")
-                            
-                            # Process the transcript through the same pipeline as documents
-                            # Mark as transcript so discussion_summary can be updated
-                            extraction_result = await process_medical_document(
-                                document_text=final_text,
-                                patient_id=patient_id,
-                                appointment_id=appointment_id or "",
-                                file_path=None  # No PDF, just text
-                            )
-                            
-                            if extraction_result and extraction_result.get("errors"):
-                                print(f"⚠️  LLM extraction errors: {extraction_result['errors']}")
-                            elif extraction_result:
-                                print(f"✅ Successfully extracted and saved clinical information from transcript")
-                        else:
-                            print(f"⚠️  Could not find patient_id or appointment_id, skipping LLM extraction")
-                    except Exception as e:
-                        print(f"⚠️  Error processing transcript through LLM pipeline: {e}")
-                        import traceback
-                        traceback.print_exc()
-                        # Don't fail the WebSocket if extraction fails
+                await save_discussion_to_appointment(final_text, is_final=True)            
 
             # Try to send final discussion, but don't fail if connection is closed
             try:
@@ -542,6 +513,74 @@ async def live_detection(websocket: WebSocket):
                 await websocket.close()
         except:
             pass  # Already closed or error closing
+
+
+
+@router.post("/{appointment_id}/finalize-recording")
+async def finalize_recording(appointment_id: str):
+    """
+    Finalize the recording for an appointment.
+    Fetches the discussion text and triggers LLM extraction to update discussion_summary.
+    """
+    try:
+        # Get appointment
+        try:
+            appointment = await appointment_collection.find_one({"_id": ObjectId(appointment_id)})
+        except:
+            appointment = await appointment_collection.find_one({"_id": appointment_id})
+            
+        if not appointment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Appointment not found"
+            )
+            
+        discussion = appointment.get("discussion", "")
+        
+        patient_id = appointment.get("patient_id")
+        if not patient_id:
+             raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Appointment has no patient_id"
+            )
+            
+        print(f"🔄 Processing finalized discussion for appointment {appointment_id}")
+
+        document_text = f"""
+            discussion: {discussion}            
+        """
+        
+        # Invoke the tool
+        # extracted_info is a Dict
+        extracted_info = extract_clinical_info.invoke({"document_text": document_text})
+        
+        # Save to Mongo
+        result_msg = await _save_to_mongo_impl(
+            patient_id=str(patient_id),
+            appointment_id=str(appointment_id),
+            extracted=extracted_info,
+            is_transcript=True # Explicitly set as transcript to allow discussion_summary update
+        )
+        
+        # Extract discussion summary if present
+        discussion_summary = extracted_info.get("appointment_updates", {}).get("discussion_summary", "")
+
+        return {
+            "message": "Recording finalized and processed successfully",
+            "details": result_msg,
+            "discussion_summary": discussion_summary
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error finalizing recording: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to finalize recording: {str(e)}"
+        )
 
 
 @router.post("/{appointment_id}/diagnosis")
