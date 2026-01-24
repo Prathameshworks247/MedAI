@@ -940,7 +940,7 @@ const ActiveSession = () => {
             uploaded: false,
             id: 'doc-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9)
         }));
-        
+
         setDoctorDiagnosisFiles(prev => [...prev, ...newFiles]);
         e.target.value = '';
     };
@@ -962,7 +962,7 @@ const ActiveSession = () => {
 
             // Step 1: Upload new files if any
             const filesToUpload = doctorDiagnosisFiles.filter(f => !f.uploaded).map(f => f.file);
-            
+
             if (filesToUpload.length > 0) {
                 const formData = new FormData();
                 filesToUpload.forEach(file => {
@@ -980,7 +980,7 @@ const ActiveSession = () => {
                 });
 
                 const uploadData = await uploadResponse.json();
-                
+
                 if (uploadData.success) {
                     newlyUploadedFiles = [...uploadData.files];
                 } else {
@@ -1357,6 +1357,7 @@ const ActiveSession = () => {
                     </div>
                     <DiagnosisDashboard
                         data={appointment.generated_diagnosis}
+                        text={appointment.generated_diagnosis_text}
                     />
                 </div>
             )}
@@ -1389,69 +1390,69 @@ const ActiveSession = () => {
                             <div className="text-gray-800 whitespace-pre-wrap leading-relaxed mb-6" style={{ fontSize: '16px' }}>
                                 {appointment.doctor_diagnosis.text || "No clinical notes provided."}
                             </div>
-                            
-                                    {appointment.doctor_diagnosis.files && appointment.doctor_diagnosis.files.length > 0 && (
-                                        <div>
-                                            <h4 className="text-base font-bold text-gray-800 mb-3">Saved Supporting Documents:</h4>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                {appointment.doctor_diagnosis.files.map((file, idx) => (
-                                                    <div key={idx} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-3 hover:bg-gray-100 transition-colors">
-                                                        <div className="flex items-center space-x-3 overflow-hidden">
-                                                            <FileText className="w-5 h-5 text-indigo-500 flex-shrink-0" />
-                                                            <span className="text-sm text-gray-800 truncate font-medium" title={file.name}>
-                                                                {file.name}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center space-x-2">
-                                                            <a
-                                                                href={file.uri}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="text-indigo-600 hover:text-indigo-800 p-2 hover:bg-indigo-50 rounded transition-colors"
-                                                                title="View Document"
-                                                            >
-                                                                <Eye className="w-5 h-5" />
-                                                            </a>
-                                                            <button
-                                                                onClick={async () => {
-                                                                    if (confirm(`Are you sure you want to remove ${file.name}?`)) {
-                                                                        const updatedFiles = appointment.doctor_diagnosis.files.filter((_, i) => i !== idx);
-                                                                        try {
-                                                                            const response = await apiRequest(`/appointments/${appointmentId}/doctor-diagnosis`, {
-                                                                                method: 'POST',
-                                                                                body: JSON.stringify({
-                                                                                    diagnosis_text: appointment.doctor_diagnosis.text,
-                                                                                    files: updatedFiles
-                                                                                })
-                                                                            });
-                                                                            if (response.success) {
-                                                                                setAppointment(prev => ({
-                                                                                    ...prev,
-                                                                                    doctor_diagnosis: {
-                                                                                        ...prev.doctor_diagnosis,
-                                                                                        files: updatedFiles
-                                                                                    }
-                                                                                }));
+
+                            {appointment.doctor_diagnosis.files && appointment.doctor_diagnosis.files.length > 0 && (
+                                <div>
+                                    <h4 className="text-base font-bold text-gray-800 mb-3">Saved Supporting Documents:</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {appointment.doctor_diagnosis.files.map((file, idx) => (
+                                            <div key={idx} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-3 hover:bg-gray-100 transition-colors">
+                                                <div className="flex items-center space-x-3 overflow-hidden">
+                                                    <FileText className="w-5 h-5 text-indigo-500 flex-shrink-0" />
+                                                    <span className="text-sm text-gray-800 truncate font-medium" title={file.name}>
+                                                        {file.name}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center space-x-2">
+                                                    <a
+                                                        href={file.uri}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-indigo-600 hover:text-indigo-800 p-2 hover:bg-indigo-50 rounded transition-colors"
+                                                        title="View Document"
+                                                    >
+                                                        <Eye className="w-5 h-5" />
+                                                    </a>
+                                                    <button
+                                                        onClick={async () => {
+                                                            if (confirm(`Are you sure you want to remove ${file.name}?`)) {
+                                                                const updatedFiles = appointment.doctor_diagnosis.files.filter((_, i) => i !== idx);
+                                                                try {
+                                                                    const response = await apiRequest(`/appointments/${appointmentId}/doctor-diagnosis`, {
+                                                                        method: 'POST',
+                                                                        body: JSON.stringify({
+                                                                            diagnosis_text: appointment.doctor_diagnosis.text,
+                                                                            files: updatedFiles
+                                                                        })
+                                                                    });
+                                                                    if (response.success) {
+                                                                        setAppointment(prev => ({
+                                                                            ...prev,
+                                                                            doctor_diagnosis: {
+                                                                                ...prev.doctor_diagnosis,
+                                                                                files: updatedFiles
                                                                             }
-                                                                        } catch (err) {
-                                                                            alert("Failed to remove file.");
-                                                                        }
+                                                                        }));
                                                                     }
-                                                                }}
-                                                                className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded transition-colors font-bold"
-                                                                title="Remove File"
-                                                            >
-                                                                ×
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                ))}
+                                                                } catch (err) {
+                                                                    alert("Failed to remove file.");
+                                                                }
+                                                            }
+                                                        }}
+                                                        className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded transition-colors font-bold"
+                                                        title="Remove File"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
-                                <button 
+                                <button
                                     onClick={() => {
                                         setDoctorDiagnosisText(appointment.doctor_diagnosis.text);
                                         alert("You can now update your clinical notes below. Re-upload files if you wish to add more.");
