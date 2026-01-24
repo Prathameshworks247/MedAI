@@ -14,6 +14,7 @@ import re
 from src.llm.featherless import llm as med42_llm
 from src.llm.gemini import llm as gemini_llm
 from src.services.chatbot_context import get_patient_context, get_appointment_sequence, get_appointment_context, get_time_series_context
+from src.services.timeseries_predictor import predict_future_metrics
 
 
 async def build_diagnosis_context(patient_id: str, appointment_id: str) -> Dict[str, Any]:
@@ -41,6 +42,14 @@ async def build_diagnosis_context(patient_id: str, appointment_id: str) -> Dict[
     # Get time series data from user collection
     time_series_data = await get_time_series_context(patient_id)
     context["time_series"] = time_series_data
+    
+    # Get LSTM predictions for time series
+    try:
+        predictions = await predict_future_metrics(time_series_data)
+        context["predictions"] = predictions
+    except Exception as e:
+        print(f"⚠️ Failed to generate LSTM predictions: {e}")
+        context["predictions"] = {}
     
     # Get appointment sequence: current, baseline (0), and previous 2
     appointment_sequence = await get_appointment_sequence(appointment_id)
@@ -260,7 +269,7 @@ CRITICAL RULES:
 4. Follow the exact schema provided
 5. For dates, use ISO 8601 format (YYYY-MM-DD)
 6. For enums, use only the allowed values: "improving" | "worsening" | "stable" for status, "better" | "worse" | "same" for change, "lower" | "higher" for better
-7. **CRITICAL: Extract test trends ONLY from time_series data in user collection - DO NOT use appointment test data**
+7. **CRITICAL: Extract test trends from time_series data AND the provided LSTM predictions. Mark predicted data points with is_prediction: true.**
 8. Build evidence chain from appointment history
 9. Calculate risk scores where applicable
 10. Create progress metrics comparing baseline to current
@@ -270,15 +279,16 @@ OUTPUT SCHEMA (return valid JSON with these exact fields):
 Required root fields:
 - patient: object with "name" (string) and "last_updated" (ISO 8601 datetime string)
 - primary_diagnosis: object with "condition" (string), "icd_code" (string ICD-10), "confidence" (number 0.0-1.0), "status" (one of: "improving", "worsening", "stable"), "evidence_chain" (array of objects with "appointment", "date", "value", "change")
-- test_trends: object where keys are test names, values are objects with "test_name", "unit", "normal_range" (array of 2 numbers), "data" (array of objects with "date", "value", "appointment_number")
-  * IMPORTANT: test_trends MUST be extracted ONLY from the time_series field in the user collection (patient.time_series.metrics)
-  * DO NOT extract test trends from appointment test data
+- test_trends: object where keys are test names, values are objects with "test_name", "unit", "normal_range" (array of 2 numbers), "data" (array of objects with "date", "value", "appointment_number", "is_prediction")
+  * IMPORTANT: test_trends MUST include both historical data (from patient.time_series.metrics) and forecasted data (from the predictions field in context).
+  * Mark all forecasted data points with "is_prediction": true. Historical points should have "is_prediction": false or omit the field.
   * Only use the 5 fixed parameters available in time_series: blood_pressure, heart_rate, temperature, glucose, cholesterol (and optionally hemoglobin, wbc, rbc, platelets if available)
 - clinical_reasoning: object with "nodes" (array) and "connections" (array)
   * nodes: array of objects with "id" (string), "label" (string), "type" (one of: "input", "process", "output", "evidence"), "icon" (string emoji)
   * connections: array of objects with "from" (string node id), "to" (string node id), "label" (optional string)
 - risk_scores: array of objects with "name", "value" (number), "max" (number), "interpretation" (string)
-- progress_metrics: array of objects with "name", "baseline" (number), "current" (number), "unit" (string), "target" (number), "better" (one of: "lower", "higher"), "icon" (string)
+- progress_metrics: array of objects with "name", "baseline" (number), "current" (number), "unit" (string), "target" (number), "better" (one of: "lower", "higher"), "icon" (string), "is_prediction" (boolean)
+  * Set "is_prediction": true if the "current" value is based on an LSTM forecast rather than a recorded measurement.
 - alternative_diagnoses: array of objects with "icd_10_code", "diagnosis_name", "confidence_score" (number 0.0-1.0), "rationale" (string)
 
 CRITICAL: Return ONLY valid JSON. Do NOT use double curly braces. Use single curly braces for JSON objects. Do NOT wrap in markdown code blocks. Return pure JSON only."""
@@ -294,10 +304,12 @@ Based on the Med42 diagnosis text above and the patient/appointment context, ext
 Key tasks:
 1. Extract primary diagnosis details (condition, ICD code, confidence, status)
 2. Build evidence chain from appointment history showing progression
-3. **CRITICAL: Extract test trends ONLY from time_series data in the user collection** - DO NOT use test data from appointments
+3. **CRITICAL: Extract test trends from time_series data AND the provided LSTM predictions**
    - The time_series field contains metrics: blood_pressure, heart_rate, temperature, glucose, cholesterol, hemoglobin, wbc, rbc, platelets
-   - Each metric has time series data with timestamps as keys and values containing "value" (float) and "is_anamoly" (boolean)
-   - Convert this time series data into test_trends format with test_name, unit, normal_range, and data array
+   - Each metric has historical time series data with timestamps as keys
+   - The "predictions" field in context contains forecasted values for these metrics
+   - Convert both history and predictions into test_trends format with test_name, unit, normal_range, and data array
+   - Mark predicted data points with "is_prediction": true
    - Use appropriate units: blood_pressure (mmHg), heart_rate (bpm), temperature (°C), glucose (mg/dL), cholesterol (mg/dL), hemoglobin (g/dL), wbc (x10^9/L), rbc (x10^12/L), platelets (x10^9/L)
    - Set normal ranges appropriately for each metric
    - Map timestamps to appointment dates where possible

@@ -10,6 +10,7 @@ interface Metric {
     target: number;
     better: "lower" | "higher";
     icon: string;
+    is_prediction?: boolean;
 }
 
 interface ProgressComparisonProps {
@@ -49,14 +50,25 @@ export function ProgressComparison({ metrics }: ProgressComparisonProps) {
                             initial={{ opacity: 0, x: -20 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: idx * 0.1 }}
-                            className="group p-4 rounded-xl border border-border bg-card hover:bg-muted/30 transition-colors"
+                            className={`group p-4 rounded-xl border transition-colors ${
+                                metric.is_prediction 
+                                ? "border-primary/30 bg-primary/5 border-dashed" 
+                                : "border-border bg-card hover:bg-muted/30"
+                            }`}
                         >
                             {/* Metric header */}
                             <div className="flex justify-between items-start mb-4">
                                 <div className="flex items-center gap-3">
                                     <div className="text-2xl">{metric.icon}</div>
                                     <div>
-                                        <h4 className="font-semibold text-foreground">{metric.name}</h4>
+                                        <div className="flex items-center gap-2">
+                                            <h4 className="font-semibold text-foreground">{metric.name}</h4>
+                                            {metric.is_prediction && (
+                                                <span className="text-[9px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full font-bold uppercase tracking-tighter">
+                                                    Projected
+                                                </span>
+                                            )}
+                                        </div>
                                         <p className="text-xs text-muted-foreground">Target: {metric.target} {metric.unit}</p>
                                     </div>
                                 </div>
@@ -89,12 +101,21 @@ export function ProgressComparison({ metrics }: ProgressComparisonProps) {
 
                                 {/* Current */}
                                 <div className="flex-1 flex flex-col gap-1">
-                                    <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Current</span>
-                                    <div className={`h-10 rounded-lg flex items-center px-3 font-mono font-bold relative overflow-hidden transition-all group-hover:shadow-md ${isImproving ? "bg-emerald-500 text-emerald-950" : "bg-rose-500 text-rose-950"
+                                    <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
+                                        {metric.is_prediction ? "Predicted" : "Current"}
+                                    </span>
+                                    <div className={`h-10 rounded-lg flex items-center px-3 font-mono font-bold relative overflow-hidden transition-all group-hover:shadow-md ${
+                                        metric.is_prediction 
+                                        ? "bg-primary text-primary-foreground"
+                                        : isImproving ? "bg-emerald-500 text-emerald-950" : "bg-rose-500 text-rose-950"
                                         }`}>
                                         <div className="relative z-10 flex items-center gap-2">
                                             {metric.current} {metric.unit}
-                                            {isImproving ? <ArrowDownRight className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
+                                            {metric.is_prediction ? (
+                                                <RefreshCcw className="w-3 h-3 animate-spin-slow" />
+                                            ) : (
+                                                isImproving ? <ArrowDownRight className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />
+                                            )}
                                         </div>
                                         {/* Shimmer effect */}
                                         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] animate-[shimmer_2s_infinite]" />
