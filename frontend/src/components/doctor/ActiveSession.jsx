@@ -6,6 +6,7 @@ import { apiRequest } from '../../utils/api';
 import DiagnosisDashboard from '../diagnosis/Main';
 import PDFViewer from './PDFViewer';
 import ChatButton from './ChatButton';
+import AppointmentHistoryCard from './AppointmentHistoryCard';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -263,7 +264,7 @@ const ActiveSession = () => {
     const [isFinalizing, setIsFinalizing] = useState(false);
 
     const [expandedActivity, setExpandedActivity] = useState(null);
-    const [expandedHistoryId, setExpandedHistoryId] = useState(null);
+    const [expandedHistoryId, setExpandedHistoryId] = useState(null); // Keep for now as back compat if needed, but not used by AppointmentHistoryCard
 
     // Audio recording state
     const [isRecording, setIsRecording] = useState(false);
@@ -1202,149 +1203,14 @@ const ActiveSession = () => {
                             Previous Visits
                         </h3>
                         <div className="space-y-4">
-                            {appointment.previousAppointments.map((prevApt) => {
-                                const isExpanded = expandedHistoryId === prevApt.id;
-                                const session = prevApt.session;
-                                const aptNo = prevApt.id.split('-')[1];
-
-                                return (
-                                    <div key={prevApt.id} className={`card ${isExpanded ? 'ring-2 ring-primary-500' : ''}`}>
-                                        <div className="flex items-start justify-between mb-3">
-                                            <div className="flex-1">
-                                                <div className="flex items-center space-x-2 mb-1">
-                                                    <Calendar className="w-5 h-5 text-gray-600" />
-                                                    <h4 className="text-lg font-bold text-gray-900">
-                                                        {aptNo == 0 ? "Baseline Visit" : `Follow Up Visit #${aptNo}`}
-                                                    </h4>
-                                                </div>
-                                                <p className="text-base font-semibold mb-1">Doctor: {prevApt.doctor?.name || 'Unknown'}</p>
-                                                <p className="text-sm text-gray-700 mb-1">Chief Complaint: {prevApt.chiefComplaint}</p>
-                                                <p className="text-sm text-gray-600 mb-1 italic">
-                                                    "{prevApt.scheduledDate} at {prevApt.scheduledTime}"
-                                                </p>
-                                            </div>
-                                            <span className={`text-xs px-3 py-1 rounded-full font-semibold ${getStatusBadge(prevApt.status)}`}>
-                                                {(prevApt.status || 'completed').replace('_', ' ')}
-                                            </span>
-                                        </div>
-
-                                        <div className="flex space-x-2">
-                                            <button
-                                                onClick={() => setExpandedHistoryId(isExpanded ? null : prevApt.id)}
-                                                className="flex-1 btn-primary flex items-center justify-center"
-                                            >
-                                                <Eye className="w-4 h-4 mr-2" />
-                                                {isExpanded ? 'Hide Details' : 'View Details'}
-                                            </button>
-                                            <button className="btn-secondary flex items-center">
-                                                <Download className="w-4 h-4 mr-2" />
-                                                Export
-                                            </button>
-                                        </div>
-
-                                        {/* Details */}
-                                        {isExpanded && session && (
-                                            <div className="mt-4 pt-4 border-t border-gray-200">
-                                                <h5 className="text-lg font-bold text-gray-900 mb-4">Session Details</h5>
-
-                                                {/* Discussion */}
-                                                {session.discussion && (
-                                                    <div className="mb-6">
-                                                        <h6 className="flex items-center text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide">
-                                                            <span className="w-5 h-5 mr-2 flex items-center justify-center bg-blue-100 text-blue-600 rounded-full">🎤</span>
-                                                            Discussion
-                                                        </h6>
-                                                        <div className="bg-gray-50 rounded-lg p-4 border border-gray-100 max-h-60 overflow-y-auto">
-                                                            <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{session.discussion}</p>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Reports */}
-                                                {session.reports && session.reports.length > 0 && (
-                                                    <div className="mb-6">
-                                                        <h6 className="flex items-center text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide">
-                                                            <span className="w-5 h-5 mr-2 flex items-center justify-center bg-green-100 text-green-600 rounded-full">📋</span>
-                                                            Reports
-                                                        </h6>
-                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                            {session.reports.map((report, idx) => (
-                                                                <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 hover:border-green-300 rounded-lg p-3 shadow-sm transition-all group">
-                                                                    <div className="flex items-center space-x-3 overflow-hidden">
-                                                                        <FileText className="w-5 h-5 text-gray-400 group-hover:text-green-500" />
-                                                                        <span className="text-sm font-medium text-gray-700 truncate" title={report.file_name}>{report.file_name}</span>
-                                                                    </div>
-                                                                    <a
-                                                                        href={report.uri}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="ml-2 p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
-                                                                        title="Open Report"
-                                                                    >
-                                                                        <Eye className="w-4 h-4" />
-                                                                    </a>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Tests */}
-                                                {session.tests && session.tests.length > 0 && (
-                                                    <div className="mb-6">
-                                                        <h6 className="flex items-center text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide">
-                                                            <span className="w-5 h-5 mr-2 flex items-center justify-center bg-purple-100 text-purple-600 rounded-full">🧪</span>
-                                                            Tests
-                                                        </h6>
-                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                            {session.tests.map((test, idx) => (
-                                                                <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 hover:border-purple-300 rounded-lg p-3 shadow-sm transition-all group">
-                                                                    <div className="flex items-center space-x-3 overflow-hidden">
-                                                                        <FileText className="w-5 h-5 text-gray-400 group-hover:text-purple-500" />
-                                                                        <span className="text-sm font-medium text-gray-700 truncate" title={test.doc_name}>{test.doc_name}</span>
-                                                                    </div>
-                                                                    <a
-                                                                        href={test.uri}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="ml-2 p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                                                                        title="Open Test Document"
-                                                                    >
-                                                                        <Eye className="w-4 h-4" />
-                                                                    </a>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Generated Diagnosis */}
-                                                {prevApt.diagnosis_generated_at && session.generated_diagnosis && (
-                                                    <div className="mb-6 mt-8 border-2 border-indigo-100 bg-white rounded-lg p-4">
-                                                        <div className="mb-4 border-b border-gray-100 pb-4">
-                                                            <h6 className="text-lg font-bold text-gray-900 flex items-center">
-                                                                <Sparkles className="w-5 h-5 mr-2 text-indigo-600" />
-                                                                AI Diagnostic Analysis
-                                                            </h6>
-                                                            <p className="text-sm text-gray-500 mt-1">
-                                                                Comprehensive analysis generated on {new Date(prevApt.diagnosis_generated_at).toLocaleString()}
-                                                            </p>
-                                                        </div>
-                                                        <DiagnosisDashboard
-                                                            data={session.generated_diagnosis}
-                                                        />
-                                                    </div>
-                                                )}
-
-                                                {/* Fallback if no details */}
-                                                {!session.discussion && (!session.reports || session.reports.length === 0) && (!session.tests || session.tests.length === 0) && !prevApt.diagnosis_generated_at && (
-                                                    <p className="text-sm text-gray-500 italic text-center py-4">No detailed session records available.</p>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
+                            {appointment.previousAppointments.map((prevApt) => (
+                                <AppointmentHistoryCard
+                                    key={prevApt.id}
+                                    appointment={prevApt}
+                                    patientId={appointment.patientId || appointment.patient?.id || appointment.patient_id}
+                                    patientName={appointment.patient?.name}
+                                />
+                            ))}
                         </div>
                     </div>
                 )}

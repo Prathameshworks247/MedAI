@@ -41,7 +41,7 @@ class PatientMetrics(BaseModel):
             "temperature",
             "glucose",
             "cholesterol",
-            "hemoglobin",
+            "haemoglobin",
             "wbc",
             "rbc",
             "platelets"
