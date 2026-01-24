@@ -17,6 +17,62 @@ from src.services.chatbot_context import get_patient_context, get_appointment_se
 from src.services.timeseries_predictor import predict_future_metrics
 
 
+async def compress_diagnosis_context_with_gemini(context: Dict[str, Any], max_chars: int = 8000) -> str:
+    """
+    Use Gemini to format and compress diagnosis context for Med42.
+    Produces a structured clinical summary: Patient Profile, Trends, and History.
+    """
+    try:
+        print(f"🔄 Compressing diagnosis context with Gemini (target: {max_chars} chars)...")
+        original_json = json.dumps(context, indent=2, default=str)
+        original_size = len(original_json)
+
+        compression_prompt = (
+            "You are a clinical context compressor. Your output will be used by Med42 for medical diagnosis.\n\n"
+            "OUTPUT FORMAT (use these exact section headers, plain text only):\n\n"
+            "## PATIENT PROFILE\n"
+            "Demographics, age, gender, and relevant medical history/allergies.\n\n"
+            "## CLINICAL TRENDS (TIME SERIES & PREDICTIONS)\n"
+            "Summarize key vital signs and metrics. Include historical values and LSTM predictions provided in the data.\n"
+            "Format as: Metric: [History] -> [Predicted Future].\n\n"
+            "## APPOINTMENT HISTORY\n"
+            "For baseline, previous, and current appointments, provide:\n"
+            "- Date and Type\n"
+            "- Chief Complaint\n"
+            "- Clinical Summary\n"
+            "- Key Test Results & Report Findings (Preserve URIs/IDs)\n\n"
+            "RULES:\n"
+            "1. Stay within " + str(max_chars) + " characters.\n"
+            "2. Prioritize factual data (values, dates, trends) over conversational text.\n"
+            "3. Preserve all document IDs, URIs, and clinical identifiers exactly.\n"
+            "4. Be objective and concise. Med42 must be able to infer a diagnosis from this.\n\n"
+            "RAW CONTEXT (JSON):\n"
+        ) + original_json
+
+        from langchain_core.messages import HumanMessage, SystemMessage
+        messages = [
+            SystemMessage(content="You are a clinical data expert that compresses patient history into high-density medical summaries for diagnostic AI models."),
+            HumanMessage(content=compression_prompt)
+        ]
+
+        response = await gemini_llm.ainvoke(messages)
+        compressed_text = response.content if hasattr(response, 'content') else str(response)
+        
+        # Clean up any markdown code blocks
+        compressed_text = re.sub(r'```[a-z]*\s*', '', compressed_text)
+        compressed_text = re.sub(r'```\s*$', '', compressed_text, flags=re.MULTILINE)
+        compressed_text = compressed_text.strip()
+
+        compressed_size = len(compressed_text)
+        print(f"✅ Diagnosis context compressed: {original_size} -> {compressed_size} chars")
+        return compressed_text
+
+    except Exception as e:
+        print(f"⚠️ Gemini compression failed: {e}. Using intelligent fallback.")
+        # Fallback to simple truncation or a basic formatter
+        return json.dumps(context, indent=2, default=str)[:max_chars]
+
+
 async def build_diagnosis_context(patient_id: str, appointment_id: str) -> Dict[str, Any]:
     """
     Build comprehensive context for diagnosis generation.
@@ -136,30 +192,31 @@ async def generate_diagnosis(patient_id: str, appointment_id: str) -> str:
         print(f"📊 Building diagnosis context for appointment {appointment_id}...")
         context = await build_diagnosis_context(patient_id, appointment_id)
         
-        # Format context as JSON (truncate if needed for token limits)
-        context_json = json.dumps(context, indent=2, default=str)
+        # Compress context using Gemini
+        # Med42 has a 4096 token limit, so we aim for ~8000-10000 characters
+        MAX_CONTEXT_CHARS = 10000
+        context_summary = await compress_diagnosis_context_with_gemini(context, MAX_CONTEXT_CHARS)
         
-        # Truncate context if too large (reserve ~2000 tokens for prompt + response)
-        # Med42 has 4096 token limit, so we can use ~2000 tokens for context
-        MAX_CONTEXT_CHARS = 8000  # ~2000 tokens
-        if len(context_json) > MAX_CONTEXT_CHARS:
-            context_json = context_json[:MAX_CONTEXT_CHARS] + "\n... (context truncated)"
-            print(f"⚠️  Context truncated to {MAX_CONTEXT_CHARS} characters")
+        # Print for transparency
+        print("\n" + "=" * 80)
+        print("📦 COMPRESSED DIAGNOSIS CONTEXT:")
+        print("=" * 80)
+        print(context_summary)
+        print("=" * 80 + "\n")
         
         # Build prompt - plain text output
         system_prompt = """You are a clinical AI assistant specialized in medical diagnosis using the Med42 model.
 
-Your task is to analyze comprehensive patient data and generate 5 potential diagnoses ranked by confidence.
+Your task is to analyze a structured clinical summary and generate 5 potential diagnoses ranked by confidence.
 
 **CRITICAL: Your entire response MUST be formatted using Markdown.** Use headers, bullet points, bold text, and tables to make the analysis clear and professional.
 
 CRITICAL RULES:
-1. **USE ALL AVAILABLE DATA**: Analyze patient medical history, all appointment discussions, test results, reports, and chief complaints
-2. **COMPREHENSIVE REASONING**: For the primary diagnosis (highest confidence), provide a detailed, step-by-step reasoning chain that shows your complete thought process. Use the full extent of your medical knowledge.
-3. **EVIDENCE-BASED**: Base all diagnoses on the provided data. Do not invent information.
-4. **CONFIDENCE SCORES**: Assign realistic confidence scores (0.0-1.0) based on available evidence
-5. **ICD-10 CODES**: Use appropriate ICD-10 diagnosis codes when possible
-6. **RISK FACTORS**: Identify all relevant risk factors from the patient's medical history, test results, and clinical presentation
+1. **USE ALL AVAILABLE DATA**: Analyze patient medical history, trends, test results, and clinical summaries provided.
+2. **COMPREHENSIVE REASONING**: For the primary diagnosis, provide a detailed reasoning chain.
+3. **EVIDENCE-BASED**: Base all diagnoses on the provided summary. Do not invent information.
+4. **CONFIDENCE SCORES**: Assign scores (0.0-1.0) based on evidence strength.
+5. **ICD-10 CODES**: Use appropriate codes when possible.
 
 OUTPUT FORMAT:
 Provide a comprehensive text response with the following structure:
@@ -168,54 +225,35 @@ Provide a comprehensive text response with the following structure:
    - Diagnosis Code (ICD-10): [code]
    - Diagnosis Name: [name]
    - Confidence Score: [0.0-1.0]
-   - Diagnosis Summary: [Concise but complete summary, 2-3 paragraphs]
-   - Comprehensive Reasoning Chain: [THIS IS THE MOST IMPORTANT SECTION - Provide an extremely comprehensive, detailed, step-by-step reasoning chain. Use the FULL EXTENT of your medical knowledge. Explain:
-     * How you analyzed the patient's symptoms, history, and test results
-     * The differential diagnosis process you went through
-     * Why this diagnosis is most likely based on the evidence
-     * Pathophysiology and clinical reasoning
-     * How each piece of evidence supports or refutes the diagnosis
-     * Any alternative considerations and why they were ruled out
-     * Clinical decision-making process
-     Be THOROUGH and COMPREHENSIVE - this should be a detailed medical analysis (5-10 paragraphs minimum)]
-   - Risk Factors: [List all risk factors involved, one per line]
+   - Diagnosis Summary: [Concise but complete summary]
+   - Comprehensive Reasoning Chain: [Detailed step-by-step clinical logic]
+   - Risk Factors: [List risk factors involved]
 
 2. ALTERNATIVE DIAGNOSES (Other 4, sorted by confidence descending)
-   For each alternative diagnosis:
+   For each alternative:
    - Diagnosis Code (ICD-10): [code]
    - Diagnosis Name: [name]
    - Confidence Score: [0.0-1.0]
-   - Summary: [Brief summary of the diagnosis]
+   - Summary: [Brief summary]"""
 
-Format your response clearly with sections and subsections. Be thorough and comprehensive, especially in the reasoning chain for the primary diagnosis."""
-
-        human_prompt_template = """PATIENT AND APPOINTMENT DATA:
+        human_prompt_template = """STRUCTURED CLINICAL CONTEXT:
 {context_data}
 
-Based on the above comprehensive patient data, appointment history (baseline, previous 2, and current), test results, reports, and medical history, generate 5 potential diagnoses.
+Based on the structured patient profile, trends, and appointment history above, generate 5 potential diagnoses.
 
-Analyze:
-- Patient demographics and medical history
-- Chief complaints across all appointments
-- Discussion summaries and clinical notes
-- Test results and their values
-- Reports and imaging findings
-- Patterns and trends across appointments
+Analyze patterns in vitals, lab results, and clinical notes to provide evidence-based conclusions and thorough reasoning for the primary diagnosis."""
 
-Generate diagnoses with appropriate ICD-10 codes, confidence scores, and for the primary diagnosis, provide comprehensive reasoning."""
-
-        # Escape curly braces in context_json for ChatPromptTemplate
-        # ChatPromptTemplate interprets { and } as template variables, so we need to escape them
-        escaped_context_json = context_json.replace("{", "{{").replace("}", "}}")
+        # Escape any remaining curly braces in context_summary if any (though Gemini output usually doesn't have them in a way that breaks LangChain)
+        escaped_context_summary = context_summary.replace("{", "{{").replace("}", "}}")
         
-        # Create prompt template with placeholder
+        # Create prompt template
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", human_prompt_template)
         ])
         
-        # Fill in the context_data using partial (this avoids template variable parsing issues)
-        prompt = prompt.partial(context_data=escaped_context_json)
+        # Fill in the context_data
+        prompt = prompt.partial(context_data=escaped_context_summary)
         
         # Invoke LLM
         print(f"🤖 Generating diagnoses using Med42...")
