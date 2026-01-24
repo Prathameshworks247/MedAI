@@ -7,6 +7,8 @@ import {
     Tooltip,
     ResponsiveContainer,
     ReferenceArea,
+    ReferenceLine,
+    Label,
 } from "recharts";
 import { motion } from "framer-motion";
 import { Activity, ArrowRight } from "lucide-react";
@@ -16,7 +18,7 @@ interface DataPoint {
     date: string;
     value: number;
     appointmentNumber: number;
-    isPrediction?: boolean;
+    is_prediction?: boolean;
 }
 
 interface TestTrendChartProps {
@@ -34,20 +36,12 @@ export function TestTrendChart({
 }: TestTrendChartProps) {
     const chartData = data.map((point, idx) => ({
         ...point,
-        isBaseline: idx === 0 && !point.isPrediction,
+        isBaseline: idx === 0,
         formattedDate: new Date(point.date).toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
         }),
     }));
-
-    const historyData = chartData.filter(p => !p.isPrediction);
-    const predictionData = chartData.filter(p => p.isPrediction);
-    
-    // For the dashed line, we want to start from the last historical point to create a continuous line
-    const forecastSegment = historyData.length > 0 && predictionData.length > 0 
-        ? [historyData[historyData.length - 1], ...predictionData] 
-        : predictionData;
 
     const hasNormalRange = normalRange && normalRange.length === 2 &&
         typeof normalRange[0] === 'number' && typeof normalRange[1] === 'number';
@@ -67,6 +61,9 @@ export function TestTrendChart({
             : "stable";
 
     const change = data[data.length - 1].value - data[0].value;
+
+    const predictionStartIndex = data.findIndex(p => p.is_prediction);
+    const predictionStartPoint = predictionStartIndex !== -1 ? chartData[predictionStartIndex] : null;
 
     return (
         <motion.div
@@ -116,6 +113,22 @@ export function TestTrendChart({
                                 />
                             )}
 
+                            {predictionStartPoint && (
+                                <ReferenceLine
+                                    x={predictionStartPoint.formattedDate}
+                                    stroke="hsl(var(--muted-foreground))"
+                                    strokeDasharray="3 3"
+                                >
+                                    <Label
+                                        value="Prediction Start"
+                                        position="insideTopLeft"
+                                        fill="hsl(var(--muted-foreground))"
+                                        fontSize={10}
+                                        offset={10}
+                                    />
+                                </ReferenceLine>
+                            )}
+
                             <XAxis
                                 dataKey="formattedDate"
                                 tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
@@ -153,16 +166,9 @@ export function TestTrendChart({
                                         const abnormal = isAbnormal(point.value);
                                         return (
                                             <div className="bg-popover/95 backdrop-blur-md p-3 shadow-xl rounded-xl border border-border text-xs z-50">
-                                                <div className="flex items-center justify-between gap-4 mb-1">
-                                                    <p className="font-bold text-foreground">
-                                                        {point.formattedDate}
-                                                    </p>
-                                                    {point.isPrediction && (
-                                                        <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-bold uppercase">
-                                                            Forecast
-                                                        </span>
-                                                    )}
-                                                </div>
+                                                <p className="font-bold text-foreground mb-1">
+                                                    {point.formattedDate}
+                                                </p>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-muted-foreground">Value:</span>
                                                     <span
@@ -179,10 +185,8 @@ export function TestTrendChart({
                                 }}
                             />
 
-                            {/* Historical Data Line */}
                             <Line
                                 type="monotone"
-                                data={historyData}
                                 dataKey="value"
                                 stroke="hsl(var(--primary))"
                                 strokeWidth={3}
@@ -204,47 +208,6 @@ export function TestTrendChart({
                                 activeDot={{ r: 6, fill: "hsl(var(--primary))", strokeWidth: 0 }}
                                 animationDuration={1000}
                             />
-
-                            {/* Forecast Data Line */}
-                            {forecastSegment.length > 0 && (
-                                <Line
-                                    type="monotone"
-                                    data={forecastSegment}
-                                    dataKey="value"
-                                    stroke="hsl(var(--primary))"
-                                    strokeWidth={3}
-                                    strokeDasharray="8 4"
-                                    strokeOpacity={0.8}
-                                    dot={({ cx, cy, payload }) => {
-                                        if (!payload.isPrediction) return null; // Last hist point already has a dot
-                                        const abnormal = isAbnormal(payload.value);
-                                        return (
-                                            <g>
-                                                <rect
-                                                    key={payload.date}
-                                                    x={cx - 4}
-                                                    y={cy - 4}
-                                                    width={8}
-                                                    height={8}
-                                                    fill="hsl(var(--background))"
-                                                    stroke={abnormal ? "hsl(var(--destructive))" : "hsl(var(--primary))"}
-                                                    strokeWidth={2}
-                                                    className="transition-all hover:scale-150 cursor-pointer"
-                                                />
-                                                {/* Add a small dot inside the square for extra flair */}
-                                                <circle 
-                                                    cx={cx} 
-                                                    cy={cy} 
-                                                    r={1.5} 
-                                                    fill={abnormal ? "hsl(var(--destructive))" : "hsl(var(--primary))"} 
-                                                />
-                                            </g>
-                                        );
-                                    }}
-                                    activeDot={{ r: 6, fill: "hsl(var(--primary))", strokeWidth: 0 }}
-                                    animationDuration={1500}
-                                />
-                            )}
                         </LineChart>
                     </ResponsiveContainer>
                 ) : (
@@ -257,19 +220,11 @@ export function TestTrendChart({
             {data.length > 0 && (
                 <div className="mt-auto pt-4 flex justify-between items-center text-xs text-muted-foreground">
                     <div>
-                        Start: <span className="font-medium text-foreground">{historyData[0]?.value || data[0].value}</span>
+                        Start: <span className="font-medium text-foreground">{data[0].value}</span>
                     </div>
                     <ArrowRight className="w-3 h-3 text-muted-foreground/50" />
                     <div>
-                        {predictionData.length > 0 ? (
-                            <>
-                                Forecast: <span className="font-bold text-primary">{predictionData[predictionData.length - 1].value}</span>
-                            </>
-                        ) : (
-                            <>
-                                Latest: <span className="font-bold text-foreground">{data[data.length - 1].value}</span>
-                            </>
-                        )}
+                        Latest: <span className="font-bold text-foreground">{data[data.length - 1].value}</span>
                     </div>
                 </div>
             )}
