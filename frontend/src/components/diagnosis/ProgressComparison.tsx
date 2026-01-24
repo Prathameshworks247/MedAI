@@ -27,35 +27,23 @@ export function ProgressComparison({ metrics }: ProgressComparisonProps) {
     };
 
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-card rounded-2xl shadow-sm border border-border/50 p-6 h-full"
-        >
-            <h3 className="text-xl font-bold text-foreground mb-6 flex items-center gap-3">
-                <div className="p-2 bg-primary/10 rounded-lg">
-                    <RefreshCcw className="w-5 h-5 text-primary" />
-                </div>
-                Progress Tracking
-            </h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {metrics.map((metric, idx) => {
+                const { change, percentChange, isImproving } = calculateImprovement(metric);
+                const isStable = Math.abs(change) < 0.1;
 
-            <div className="space-y-4">
-                {metrics.map((metric, idx) => {
-                    const { change, percentChange, isImproving } = calculateImprovement(metric);
-                    const isStable = Math.abs(change) < 0.1;
-
-                    return (
-                        <motion.div
-                            key={metric.name}
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: idx * 0.1 }}
-                            className={`group p-4 rounded-xl border transition-colors ${
-                                metric.is_prediction 
-                                ? "border-primary/30 bg-primary/5 border-dashed" 
-                                : "border-border bg-card hover:bg-muted/30"
-                            }`}
-                        >
+                return (
+                    <motion.div
+                        key={metric.name}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: idx * 0.1 }}
+                        className={`bg-card rounded-2xl shadow-sm border p-6 transition-colors ${
+                            metric.is_prediction
+                            ? "border-primary/30 bg-primary/5 border-dashed"
+                            : "border-border/50 hover:bg-muted/30"
+                        }`}
+                    >
                             {/* Metric header */}
                             <div className="flex justify-between items-start mb-4">
                                 <div className="flex items-center gap-3">
@@ -122,10 +110,9 @@ export function ProgressComparison({ metrics }: ProgressComparisonProps) {
                                     </div>
                                 </div>
                             </div>
-                        </motion.div>
-                    );
-                })}
-            </div>
-        </motion.div>
+                    </motion.div>
+                );
+            })}
+        </div>
     );
 }

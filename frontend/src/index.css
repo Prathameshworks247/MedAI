@@ -24,7 +24,7 @@
     --input: 214 32% 91%;
     --ring: 198 93% 60%;
     --radius: 0.5rem;
-    
+
     /* Custom colors for diagnosis components */
     --success: 142 76% 36%;
     --success-foreground: 0 0% 100%;
@@ -38,13 +38,13 @@
     --info: 217 91% 60%;
     --info-foreground: 0 0% 100%;
     --info-muted: 217 91% 90%;
-    
+
     /* Chart colors */
     --chart-primary: 198 93% 60%;
     --chart-success: 142 76% 36%;
     --chart-warning: 38 92% 50%;
     --chart-danger: 0 84% 60%;
-    
+
     /* Sidebar colors (optional, can be removed if not needed) */
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -54,6 +54,48 @@
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217 91% 60%;
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    --card: 224 71% 4%;
+    --card-foreground: 210 40% 98%;
+    --popover: 224 71% 4%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 198 93% 60%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 215 28% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 215 28% 17%;
+    --muted-foreground: 217 33% 64%;
+    --accent: 215 28% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 215 28% 17%;
+    --input: 215 28% 17%;
+    --ring: 198 93% 60%;
+
+    /* Custom dark mode colors */
+    --success: 142 76% 46%;
+    --success-foreground: 0 0% 100%;
+    --success-muted: 142 76% 20%;
+    --danger: 0 84% 60%;
+    --danger-foreground: 0 0% 100%;
+    --danger-muted: 0 84% 25%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --warning-muted: 38 92% 20%;
+    --info: 217 91% 60%;
+    --info-foreground: 0 0% 100%;
+    --info-muted: 217 91% 20%;
+
+    /* Dark mode chart colors */
+    --chart-primary: 198 93% 60%;
+    --chart-success: 142 76% 46%;
+    --chart-warning: 38 92% 50%;
+    --chart-danger: 0 84% 60%;
   }
 
   body {
