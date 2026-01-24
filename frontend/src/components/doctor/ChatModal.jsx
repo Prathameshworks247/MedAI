@@ -5,7 +5,7 @@ import PDFViewer from './PDFViewer';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
-const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) => {
+const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, readOnly = false }) => {
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     const [chatHistories, setChatHistories] = useState([]);
     const [currentChatId, setCurrentChatId] = useState(null);
@@ -35,7 +35,7 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
             const response = await apiRequest(`/doctors/chat/history/${appointmentId}`, {
                 method: 'GET'
             });
-            
+
             if (response.success && Array.isArray(response.data)) {
                 const histories = response.data.map(chat => ({
                     id: chat.chat_id,
@@ -138,7 +138,7 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
 
                 const updated = [...chatHistories];
                 const existingIndex = updated.findIndex(h => h.id === chatId);
-                
+
                 if (existingIndex >= 0) {
                     updated[existingIndex] = savedHistory;
                 } else {
@@ -204,7 +204,7 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                 timestamp: msg.timestamp || chat.updatedAt
             }));
             setMessages(formattedMessages);
-            
+
             // Load PDF file path from chat history if available
             if (chat.pdf_file_path) {
                 console.log(`📄 Loading PDF for chat history: ${chat.pdf_file_path}`);
@@ -235,7 +235,7 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
             } else {
                 console.log(`ℹ️ No PDF file path in chat history`);
             }
-            
+
             setIsHistoryOpen(false);
         } else {
             // Chat not in local state, reload from backend
@@ -250,7 +250,7 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                     timestamp: msg.timestamp || refreshedChat.updatedAt
                 }));
                 setMessages(formattedMessages);
-                
+
                 // Load PDF file path from chat history if available
                 if (refreshedChat.pdf_file_path) {
                     // Extract document_id from file path (format: storage/pdfs/{document_id}.pdf)
@@ -270,7 +270,7 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                         await loadPdfFromBackend(docId, pdfMetadata.file_name);
                     }
                 }
-                
+
                 setIsHistoryOpen(false);
             }
         }
@@ -279,7 +279,7 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
     // Load PDF file from backend
     const loadPdfFromBackend = async (documentId, fileName = null) => {
         if (loadingPdfId === documentId) return;
-        
+
         try {
             setLoadingPdfId(documentId);
             console.log(`📄 Loading PDF from backend: ${documentId}, filename: ${fileName}`);
@@ -288,12 +288,12 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
             if (token) {
                 headers['Authorization'] = `Bearer ${token}`;
             }
-            
+
             const response = await fetch(`${API_BASE_URL}/doctors/pdf/${documentId}`, {
                 method: 'GET',
                 headers: headers
             });
-            
+
             if (response.ok) {
                 const blob = await response.blob();
                 const file = new File([blob], fileName || `${documentId}.pdf`, { type: 'application/pdf' });
@@ -373,17 +373,17 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
     // Delete a chat from history
     const handleDeleteChat = async (chatId, e) => {
         e.stopPropagation();
-        
+
         try {
             const response = await apiRequest(`/doctors/chat/history/${chatId}`, {
                 method: 'DELETE'
             });
-            
+
             if (response.success) {
                 const updated = chatHistories.filter(h => h.id !== chatId);
                 setChatHistories(updated);
                 console.log(`✅ Chat history deleted: ${chatId}`);
-                
+
                 if (currentChatId === chatId) {
                     handleNewChat();
                 }
@@ -464,13 +464,13 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                     // Only manually save if backend didn't save (shouldn't happen)
                     return updated;
                 });
-                
+
                 // Update chat_id if backend returned one (should match what we sent)
                 const finalChatId = response.data.chat_id || chatIdToUse;
                 if (finalChatId && finalChatId !== currentChatId) {
                     setCurrentChatId(finalChatId);
                 }
-                
+
                 // Refresh chat histories to show updated list
                 if (isHistoryOpen) {
                     loadChatHistories();
@@ -536,7 +536,7 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                         )}
                         <div>
                             <h2 className="text-lg font-semibold text-gray-900">
-                                {isHistoryOpen ? 'Chat History' : 'AI Assistant'}
+                                {isHistoryOpen ? 'Chat History' : (readOnly ? 'Chat Archive' : 'AI Assistant')}
                             </h2>
                             {!isHistoryOpen && patientName && (
                                 <p className="text-sm text-gray-500">{patientName}</p>
@@ -544,7 +544,7 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                         </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                        {!isHistoryOpen && (
+                        {!isHistoryOpen && !readOnly && (
                             <button
                                 onClick={handleNewChat}
                                 className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
@@ -568,13 +568,15 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                     {isHistoryOpen && (
                         <div className="w-80 border-r border-gray-200 flex flex-col bg-gray-50">
                             <div className="p-4 border-b border-gray-200">
-                                <button
-                                    onClick={handleNewChat}
-                                    className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    <span>New Chat</span>
-                                </button>
+                                {!readOnly && (
+                                    <button
+                                        onClick={handleNewChat}
+                                        className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        <span>New Chat</span>
+                                    </button>
+                                )}
                             </div>
                             <div className="flex-1 overflow-y-auto p-2">
                                 {chatHistories.length === 0 ? (
@@ -589,11 +591,10 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                                             <div
                                                 key={chat.id}
                                                 onClick={() => handleLoadChat(chat.id)}
-                                                className={`p-3 rounded-lg cursor-pointer transition-colors group ${
-                                                    currentChatId === chat.id
-                                                        ? 'bg-primary-100 border border-primary-300'
-                                                        : 'hover:bg-gray-100'
-                                                }`}
+                                                className={`p-3 rounded-lg cursor-pointer transition-colors group ${currentChatId === chat.id
+                                                    ? 'bg-primary-100 border border-primary-300'
+                                                    : 'hover:bg-gray-100'
+                                                    }`}
                                             >
                                                 <div className="flex items-start justify-between">
                                                     <div className="flex-1 min-w-0">
@@ -604,12 +605,14 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                                                             {new Date(chat.updatedAt).toLocaleDateString()}
                                                         </p>
                                                     </div>
-                                                    <button
-                                                        onClick={(e) => handleDeleteChat(chat.id, e)}
-                                                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded transition-all"
-                                                    >
-                                                        <Trash2 className="w-4 h-4 text-red-600" />
-                                                    </button>
+                                                    {!readOnly && (
+                                                        <button
+                                                            onClick={(e) => handleDeleteChat(chat.id, e)}
+                                                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded transition-all"
+                                                        >
+                                                            <Trash2 className="w-4 h-4 text-red-600" />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}
@@ -627,16 +630,14 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                                 {messages.map((message, index) => (
                                     <div
                                         key={index}
-                                        className={`flex items-start space-x-3 ${
-                                            message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''
-                                        }`}
+                                        className={`flex items-start space-x-3 ${message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''
+                                            }`}
                                     >
                                         <div
-                                            className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                                                message.role === 'assistant'
-                                                    ? 'bg-green-100'
-                                                    : 'bg-blue-100'
-                                            }`}
+                                            className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${message.role === 'assistant'
+                                                ? 'bg-green-100'
+                                                : 'bg-blue-100'
+                                                }`}
                                         >
                                             {message.role === 'assistant' ? (
                                                 <Bot className="w-5 h-5 text-green-600" />
@@ -646,11 +647,10 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                                         </div>
                                         <div className={`flex-1 ${message.role === 'user' ? 'items-end' : ''}`}>
                                             <div
-                                                className={`inline-block max-w-[80%] p-3 rounded-lg ${
-                                                    message.role === 'assistant'
-                                                        ? 'bg-gray-100 text-gray-900'
-                                                        : 'bg-blue-600 text-white'
-                                                } ${message.error ? 'bg-red-100 text-red-900' : ''}`}
+                                                className={`inline-block max-w-[80%] p-3 rounded-lg ${message.role === 'assistant'
+                                                    ? 'bg-gray-100 text-gray-900'
+                                                    : 'bg-blue-600 text-white'
+                                                    } ${message.error ? 'bg-red-100 text-red-900' : ''}`}
                                             >
                                                 <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                                                 {Array.isArray(message.citations) && message.citations.length > 0 ? (
@@ -675,7 +675,7 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                                                                         }
 
                                                                         let fileToUse = uploadedPdfFile;
-                                                                        
+
                                                                         // If we have a docId but no file, or a different file is loaded, load the correct one
                                                                         if (!fileToUse || (pdfDocumentId && pdfDocumentId !== docId)) {
                                                                             console.log('Loading PDF for citation:', docId);
@@ -691,11 +691,10 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                                                                             setShowPdfViewer(true);
                                                                         }
                                                                     }}
-                                                                    className={`text-xs bg-white/50 rounded p-2 transition-colors border border-transparent ${
-                                                                        (citation.document_id || pdfDocumentId) && citation.page_number
-                                                                            ? 'hover:bg-blue-50 cursor-pointer hover:border-blue-300'
-                                                                            : 'text-gray-600'
-                                                                    }`}
+                                                                    className={`text-xs bg-white/50 rounded p-2 transition-colors border border-transparent ${(citation.document_id || pdfDocumentId) && citation.page_number
+                                                                        ? 'hover:bg-blue-50 cursor-pointer hover:border-blue-300'
+                                                                        : 'text-gray-600'
+                                                                        }`}
                                                                     title={(citation.document_id || pdfDocumentId) && citation.page_number ? "Click to view in PDF" : "PDF not available"}
                                                                 >
                                                                     <div className="flex items-start justify-between gap-2">
@@ -733,9 +732,9 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                                             <p className="text-xs text-gray-500 mt-1">
                                                 {message.timestamp
                                                     ? new Date(message.timestamp).toLocaleTimeString([], {
-                                                          hour: '2-digit',
-                                                          minute: '2-digit',
-                                                      })
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                    })
                                                     : ''}
                                             </p>
                                         </div>
@@ -759,85 +758,86 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                             </div>
 
                             {/* Input Area */}
-                            <form onSubmit={handleSend} className="p-4 border-t border-gray-200">
-                                {uploadedPdf && (
-                                    <div className="mb-2 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-                                        <div className="flex items-center space-x-2">
-                                            <FileText className="w-4 h-4 text-blue-600" />
-                                            <span className="text-sm text-blue-700 font-medium">{uploadedPdf.file_name}</span>
-                                            <span className="text-xs text-blue-600">({uploadedPdf.total_pages} pages)</span>
+                            {!readOnly && (
+                                <form onSubmit={handleSend} className="p-4 border-t border-gray-200">
+                                    {uploadedPdf && (
+                                        <div className="mb-2 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                                            <div className="flex items-center space-x-2">
+                                                <FileText className="w-4 h-4 text-blue-600" />
+                                                <span className="text-sm text-blue-700 font-medium">{uploadedPdf.file_name}</span>
+                                                <span className="text-xs text-blue-600">({uploadedPdf.total_pages} pages)</span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setPdfDocumentId(null);
+                                                    setUploadedPdf(null);
+                                                    setUploadedPdfFile(null);
+                                                }}
+                                                className="text-red-600 hover:text-red-800 font-bold text-lg"
+                                                title="Clear PDF"
+                                            >
+                                                ×
+                                            </button>
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setPdfDocumentId(null);
-                                                setUploadedPdf(null);
-                                                setUploadedPdfFile(null);
-                                            }}
-                                            className="text-red-600 hover:text-red-800 font-bold text-lg"
-                                            title="Clear PDF"
+                                    )}
+                                    <div className="flex items-center space-x-2">
+                                        <input
+                                            ref={inputRef}
+                                            type="text"
+                                            value={input}
+                                            onChange={(e) => setInput(e.target.value)}
+                                            placeholder={uploadedPdf ? "Ask a question about the uploaded PDF..." : "Type your message..."}
+                                            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                            disabled={isLoading}
+                                        />
+                                        <input
+                                            type="file"
+                                            accept=".pdf"
+                                            onChange={handlePdfUpload}
+                                            disabled={uploadingPdf || isLoading}
+                                            className="hidden"
+                                            id="pdf-upload-chat-modal"
+                                        />
+                                        <label
+                                            htmlFor="pdf-upload-chat-modal"
+                                            className={`p-2 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors flex items-center justify-center ${uploadingPdf || isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                                                } ${uploadedPdf ? 'bg-blue-50 border-blue-300' : ''}`}
+                                            title={uploadedPdf ? `PDF: ${uploadedPdf.file_name}` : "Upload PDF for chat context"}
                                         >
-                                            ×
+                                            {uploadingPdf ? (
+                                                <Loader className="w-5 h-5 animate-spin text-gray-600" />
+                                            ) : (
+                                                <Upload className={`w-5 h-5 ${uploadedPdf ? 'text-blue-600' : 'text-gray-600'}`} />
+                                            )}
+                                        </label>
+                                        <button
+                                            type="submit"
+                                            disabled={!input.trim() || isLoading}
+                                            className="p-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            <Send className="w-5 h-5" />
                                         </button>
                                     </div>
-                                )}
-                                <div className="flex items-center space-x-2">
-                                    <input
-                                        ref={inputRef}
-                                        type="text"
-                                        value={input}
-                                        onChange={(e) => setInput(e.target.value)}
-                                        placeholder={uploadedPdf ? "Ask a question about the uploaded PDF..." : "Type your message..."}
-                                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                        disabled={isLoading}
-                                    />
-                                    <input
-                                        type="file"
-                                        accept=".pdf"
-                                        onChange={handlePdfUpload}
-                                        disabled={uploadingPdf || isLoading}
-                                        className="hidden"
-                                        id="pdf-upload-chat-modal"
-                                    />
-                                    <label
-                                        htmlFor="pdf-upload-chat-modal"
-                                        className={`p-2 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors flex items-center justify-center ${
-                                            uploadingPdf || isLoading ? 'opacity-50 cursor-not-allowed' : ''
-                                        } ${uploadedPdf ? 'bg-blue-50 border-blue-300' : ''}`}
-                                        title={uploadedPdf ? `PDF: ${uploadedPdf.file_name}` : "Upload PDF for chat context"}
-                                    >
-                                        {uploadingPdf ? (
-                                            <Loader className="w-5 h-5 animate-spin text-gray-600" />
-                                        ) : (
-                                            <Upload className={`w-5 h-5 ${uploadedPdf ? 'text-blue-600' : 'text-gray-600'}`} />
-                                        )}
-                                    </label>
-                                    <button
-                                        type="submit"
-                                        disabled={!input.trim() || isLoading}
-                                        className="p-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                    >
-                                        <Send className="w-5 h-5" />
-                                    </button>
-                                </div>
-                            </form>
+                                </form>
+                            )}
                         </div>
                     )}
                 </div>
-            </div>
 
-            {/* PDF Viewer Modal */}
-            {showPdfViewer && uploadedPdfFile && (
-                <PDFViewer
-                    pdfFile={uploadedPdfFile}
-                    pageNumber={viewerPage}
-                    coordinates={viewerCoordinates}
-                    onClose={() => {
-                        setShowPdfViewer(false);
-                        setViewerCoordinates(null);
-                    }}
-                />
-            )}
+                {/* PDF Viewer Modal */}
+                {showPdfViewer && uploadedPdfFile && (
+                    <PDFViewer
+                        pdfFile={uploadedPdfFile}
+                        pageNumber={viewerPage}
+                        coordinates={viewerCoordinates}
+                        onClose={() => {
+                            setShowPdfViewer(false);
+                            setViewerCoordinates(null);
+                        }}
+                    />
+                )}
+            </div>
         </div>
     );
 };
