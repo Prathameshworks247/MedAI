@@ -1,15 +1,21 @@
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Activity, Brain, LayoutDashboard, TrendingUp, AlertTriangle } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import { Activity, Brain, LayoutDashboard, TrendingUp, AlertTriangle, Network } from "lucide-react";
 import { DashboardHeader } from "./DashboardHeader";
 import { DiagnosisCard } from "./DiagnosisCard";
 import { TestTrendChart } from "./TestTrendChart";
 import { ProgressComparison } from "./ProgressComparison";
 import { RiskScoreVisual } from "./RiskScoreVisual";
-import { ClinicalReasoningFlow } from "./ClinicalReasoningFlow";
+import { ClinicalReasoningModal } from "./ClinicalReasoningModal";
 
-const DiagnosisDashboard = ({ data }: { data: any }) => {
+const DiagnosisDashboard = ({ data, text }: { data: any, text: string }) => {
+    const [isReasoningModalOpen, setIsReasoningModalOpen] = useState(false);
+
     if (!data) return null;
+
+    const match = text.match(/^(.*?)ALTERNATIVE DIAGNOSES/s);
+    const primary_diagnosis_text = match ? match[1] : text;
 
     const {
         primary_diagnosis,
@@ -55,52 +61,59 @@ const DiagnosisDashboard = ({ data }: { data: any }) => {
                     lastUpdated={patient?.last_updated ? new Date(patient.last_updated).toLocaleString() : new Date().toLocaleString()}
                 />
 
-                {/* Primary Diagnosis */}
-                {diagnosisData && (
-                    <motion.section variants={sectionVariants}>
+                {/* Primary Diagnosis & AI Analysis */}
+                <motion.section variants={sectionVariants}>
+                    <div className="flex items-center justify-between mb-4">
                         <SectionHeader icon={LayoutDashboard} title="Primary Diagnosis" />
-                        <DiagnosisCard diagnosis={diagnosisData} />
-                    </motion.section>
-                )}
 
-                {/* Charts Row */}
-                <section className="grid xl:grid-cols-2 gap-8">
-                    <motion.div variants={sectionVariants} className="space-y-6">
-                        <SectionHeader icon={TrendingUp} title="Test Trends Analysis" />
-                        <div className="space-y-6">
-                            {test_trends && Object.keys(test_trends).length > 0 ? (
-                                Object.entries(test_trends).map(([key, testData]: [string, any]) => (
-                                    <TestTrendChart
-                                        key={key}
-                                        testName={testData.test_name || key}
-                                        unit={testData.unit || ""}
-                                        normalRange={testData.normal_range || []}
-                                        data={testData.data || []}
-                                    />
-                                ))
-                            ) : (
-                                <EmptyState message="No test trends available." />
-                            )}
+                        {clinical_reasoning && (
+                            <button
+                                onClick={() => setIsReasoningModalOpen(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-sm font-semibold transition-colors border border-indigo-200"
+                            >
+                                <Network className="w-4 h-4" />
+                                View Clinical Reasoning Graph
+                            </button>
+                        )}
+                    </div>
+
+                    {text && text.length > 0 && (
+                        <div className="mb-6 p-4 bg-indigo-50 border border-indigo-100 rounded-lg text-gray-800 font-normal shadow-sm">
+                            <div className="prose prose-indigo max-w-none prose-headings:font-bold prose-headings:text-indigo-900 prose-p:leading-relaxed prose-strong:text-indigo-800 prose-ul:list-disc prose-ul:pl-4">
+                                <ReactMarkdown>
+                                    {primary_diagnosis_text}
+                                </ReactMarkdown>
+                            </div>
                         </div>
-                    </motion.div>
+                    )}
 
-                    <motion.div variants={sectionVariants} className="h-full flex flex-col">
-                        <SectionHeader icon={Brain} title="Clinical Reasoning" />
-                        <div className="flex-1">
-                            {clinical_reasoning ? (
-                                <ClinicalReasoningFlow
-                                    nodes={clinical_reasoning.nodes || []}
-                                    connections={clinical_reasoning.connections || []}
+                    {diagnosisData && <DiagnosisCard diagnosis={diagnosisData} />}
+                </motion.section>
+
+                {/* Charts & Test Trends - Full Width */}
+                <motion.section variants={sectionVariants} className="space-y-6">
+                    <SectionHeader icon={TrendingUp} title="Test Trends Analysis" />
+                    <div className="space-y-6">
+                        {test_trends && Object.keys(test_trends).length > 0 ? (
+                            Object.entries(test_trends).map(([key, testData]: [string, any]) => (
+                                <TestTrendChart
+                                    key={key}
+                                    testName={testData.test_name || key}
+                                    unit={testData.unit || ""}
+                                    normalRange={testData.normal_range || []}
+                                    data={testData.data || []}
                                 />
-                            ) : (
-                                <EmptyState message="No clinical reasoning graph available." />
-                            )}
-                        </div>
-                    </motion.div>
-                </section>
+                            ))
+                        ) : (
+                            <div className="col-span-full">
+                                <EmptyState message="No test trends available." />
+                            </div>
+                        )}
+                    </div>
+                </motion.section>
 
                 {/* Risk & Progress Row */}
-                <section className="grid xl:grid-cols-2 gap-8">
+                <section className="space-y-8">
                     {risk_scores && risk_scores.length > 0 && (
                         <motion.div variants={sectionVariants}>
                             <SectionHeader icon={AlertTriangle} title="Risk Assessment" />
@@ -115,6 +128,14 @@ const DiagnosisDashboard = ({ data }: { data: any }) => {
                     )}
                 </section>
             </div>
+
+            {/* Clinical Reasoning Modal */}
+            <ClinicalReasoningModal
+                isOpen={isReasoningModalOpen}
+                onClose={() => setIsReasoningModalOpen(false)}
+                nodes={clinical_reasoning?.nodes || []}
+                connections={clinical_reasoning?.connections || []}
+            />
         </motion.div>
     );
 };
