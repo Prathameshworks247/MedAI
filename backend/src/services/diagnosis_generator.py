@@ -31,21 +31,24 @@ async def compress_diagnosis_context_with_gemini(context: Dict[str, Any], max_ch
             "You are a clinical context compressor. Your output will be used by Med42 for medical diagnosis.\n\n"
             "OUTPUT FORMAT (use these exact section headers, plain text only):\n\n"
             "## PATIENT PROFILE\n"
-            "Demographics, age, gender, and relevant medical history/allergies.\n\n"
+            "Include: Name, Age, Gender, DOB, and ID. Provide a comprehensive list of ALL medical history, chronic conditions, allergies, current medications, and past surgeries/procedures.\n\n"
             "## CLINICAL TRENDS (TIME SERIES & PREDICTIONS)\n"
-            "Summarize key vital signs and metrics. Include historical values and LSTM predictions provided in the data.\n"
-            "Format as: Metric: [History] -> [Predicted Future].\n\n"
+            "Summarize all available vital signs and clinical metrics (Blood Pressure, Heart Rate, Glucose, etc.). Include historical trends across appointments and ALL LSTM predictions provided in the data.\n"
+            "Format as: Metric: [Historical Values] -> [Predicted Future Values].\n\n"
             "## APPOINTMENT HISTORY\n"
-            "For baseline, previous, and current appointments, provide:\n"
-            "- Date and Type\n"
+            "For EACH appointment in the sequence (baseline, previous, and current), provide a high-fidelity summary:\n"
+            "- Appointment ID, Date, and Type (Baseline/Follow-up/Current)\n"
             "- Chief Complaint\n"
-            "- Clinical Summary\n"
-            "- Key Test Results & Report Findings (Preserve URIs/IDs)\n\n"
+            "- Full Clinical Discussion (Summarize the entire interaction, capturing all symptoms and patient-reported data)\n"
+            "- Discussion Summary (Key clinical takeaways)\n"
+            "- ALL Test Results (Name, Value, Unit, Normal Range, and any document references)\n"
+            "- ALL Medical Reports (File Name, findings, and URIs)\n"
+            "- Previous Diagnoses (Both AI-generated and doctor-provided)\n\n"
             "RULES:\n"
-            "1. Stay within " + str(max_chars) + " characters.\n"
-            "2. Prioritize factual data (values, dates, trends) over conversational text.\n"
+            "1. Stay within " + str(max_chars) + " characters total.\n"
+            "2. DO NOT omit key clinical information. Be dense, factual, and medically rigorous.\n"
             "3. Preserve all document IDs, URIs, and clinical identifiers exactly.\n"
-            "4. Be objective and concise. Med42 must be able to infer a diagnosis from this.\n\n"
+            "4. Med42 must be able to perform a complete clinical analysis from this summary alone.\n\n"
             "RAW CONTEXT (JSON):\n"
         ) + original_json
 
@@ -92,7 +95,10 @@ async def build_diagnosis_context(patient_id: str, appointment_id: str) -> Dict[
         "age": patient_context.get("age", ""),
         "gender": patient_context.get("gender", ""),
         "medical_history": patient_context.get("medical_history", []),
-        "date_of_birth": patient_context.get("date_of_birth", "")
+        "date_of_birth": patient_context.get("date_of_birth", ""),
+        "allergies": patient_context.get("allergies", []),
+        "medications": patient_context.get("medications", []),
+        "surgeries": patient_context.get("surgeries", [])
     }
     
     # Get time series data from user collection
@@ -127,7 +133,7 @@ async def build_diagnosis_context(patient_id: str, appointment_id: str) -> Dict[
             seq_str = str(apt.get("_id", "")).split("-")[-1] if "-" in str(apt.get("_id", "")) else "0"
             try:
                 seq_num = int(seq_str)
-                if 0 < seq_num < (int(str(current.get("_id", "")).split("-")[-1]) if current and "-" in str(current.get("_id", "")) else 999):
+                if current and 0 < seq_num < int(str(current.get("_id", "")).split("-")[-1] if "-" in str(current.get("_id", "")) else "999"):
                     previous.append(apt)
             except:
                 pass
@@ -135,47 +141,38 @@ async def build_diagnosis_context(patient_id: str, appointment_id: str) -> Dict[
         # Sort previous by sequence and take last 2
         previous = sorted(previous, key=lambda x: int(str(x.get("_id", "")).split("-")[-1]) if "-" in str(x.get("_id", "")) else 0)[-2:]
         
-        # Build appointment summaries (condensed to save tokens)
+        # Build appointment data list (NO TRUNCATION HERE - let Gemini handle it)
         appointments_data = []
         
-        # Add baseline if exists
-        if baseline:
-            appointments_data.append({
-                "appointment_id": str(baseline.get("_id", "")),
-                "appointment_date": str(baseline.get("appointment_date", "")),
-                "type": "baseline",
-                "chief_complaint": baseline.get("chief_complaint", "")[:200] if baseline.get("chief_complaint") else "",
-                "discussion_summary": baseline.get("discussion_summary", "")[:500] if baseline.get("discussion_summary") else "",
-                "tests": baseline.get("tests", [])[:10],  # Limit to 10 tests
-                "reports": baseline.get("reports", [])[:5]  # Limit to 5 reports
-            })
-        
-        # Add previous 2
-        for apt in previous:
-            appointments_data.append({
+        # Function to format appointment data without truncation
+        def format_apt(apt):
+            if not apt: return None
+            return {
                 "appointment_id": str(apt.get("_id", "")),
                 "appointment_date": str(apt.get("appointment_date", "")),
-                "type": "followup",
-                "chief_complaint": apt.get("chief_complaint", "")[:200] if apt.get("chief_complaint") else "",
-                "discussion_summary": apt.get("discussion_summary", "")[:500] if apt.get("discussion_summary") else "",
-                "tests": apt.get("tests", [])[:10],
-                "reports": apt.get("reports", [])[:5]
-            })
+                "type": "baseline" if str(apt.get("_id", "")).endswith("-0") else ("current" if apt == current else "followup"),
+                "chief_complaint": apt.get("chief_complaint", ""),
+                "discussion": apt.get("discussion", ""),
+                "discussion_summary": apt.get("discussion_summary", ""),
+                "tests": apt.get("tests", []),
+                "reports": apt.get("reports", []),
+                "doctor_diagnosis": apt.get("doctor_diagnosis", {}),
+                "generated_diagnosis": apt.get("generated_diagnosis", {})
+            }
+
+        # Add appointments in sequence
+        if baseline:
+            appointments_data.append(format_apt(baseline))
         
-        # Add current (most detailed)
-        if current:
-            appointments_data.append({
-                "appointment_id": str(current.get("_id", "")),
-                "appointment_date": str(current.get("appointment_date", "")),
-                "type": "current",
-                "chief_complaint": current.get("chief_complaint", "")[:300] if current.get("chief_complaint") else "",
-                "discussion_summary": current.get("discussion_summary", "")[:800] if current.get("discussion_summary") else "",
-                "discussion": current.get("discussion", "")[:1000] if current.get("discussion") else "",  # Full discussion for current only
-                "tests": current.get("tests", []),  # All tests for current
-                "reports": current.get("reports", [])  # All reports for current
-            })
+        for apt in previous:
+            appointments_data.append(format_apt(apt))
+            
+        if current and current != baseline:
+            appointments_data.append(format_apt(current))
         
         context["appointments"] = appointments_data
+    
+    return context
     
     return context
 
