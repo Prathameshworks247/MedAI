@@ -1,149 +1,218 @@
-import tempfile
-from faster_whisper import WhisperModel
+import asyncio
+import base64
+import json
 import os
+import subprocess
+import tempfile
 import time
+import ssl
+import certifi
+import websockets
+from typing import Optional, List
+from src.config import SARVAM_AI_API_KEY
 
 class StreamingTranscriber:
     def __init__(self):
-        """Initialize transcriber."""
-        self.model = WhisperModel(
-            "small",
-            device="cpu",
-            compute_type="int8"
-        )
+        """Initialize transcriber for Sarvam AI."""
+        self.ws_url = "wss://api.sarvam.ai/speech-to-text-translate/ws"
+        self.api_key = SARVAM_AI_API_KEY
+        self.ws = None
         self.transcript = ""
+        self.session_transcript = "" # Cumulative transcript across all chunks
+        self.current_partial = ""
         self.chunk_count = 0
         self.last_process_time = time.time()
-        self.last_transcription = ""
+        self.is_connected = False
+        self._receive_task: Optional[asyncio.Task] = None
+        self.transcript_queue = asyncio.Queue()
         
-    def save_webm_to_temp(self, webm_data: bytes) -> str:
-        """Save WebM data to a temporary file - faster_whisper can process WebM directly via ffmpeg"""
-        try:
-            # Create temporary WebM file
-            webm_file = tempfile.NamedTemporaryFile(suffix=".webm", delete=False)
-            webm_file.write(webm_data)
-            webm_file.close()
+    async def connect(self):
+        """Establish connection to Sarvam AI WebSocket."""
+        if not self.api_key:
+            print("❌ SARVAM_AI_API_KEY not found in config")
+            return False
             
-            return webm_file.name
-        except Exception as e:
-            print(f"Error saving WebM to temp file: {e}")
-            raise
+        # If we were previously connected but now connecting again, 
+        # it means the previous connection ended. Commit its partial results.
+        if self.current_partial:
+            self.session_transcript += (" " if self.session_transcript else "") + self.current_partial
+            self.current_partial = ""
 
-    def process_audio_chunk(self, chunk: bytes) -> str:
-        """
-        Process complete WebM segments from frontend.
-        Frontend sends complete segments every 2 seconds, so process immediately.
-        """
-        self.chunk_count += 1
-        chunk_size_kb = len(chunk) / 1024
-        print(f"📦 Received segment {self.chunk_count}: {len(chunk)} bytes ({chunk_size_kb:.1f} KB)")
-        
-        # Frontend sends complete WebM segments, so process immediately
-        # But skip if too small (likely just header or empty)
-        # Lowered threshold since 15-second segments might start small
-        if len(chunk) < 2000:  # Less than 2KB is probably incomplete/header only
-            print(f"⏳ Segment too small ({chunk_size_kb:.1f} KB), skipping (likely header or empty)")
-            return ""
-        
-        # Process this complete segment immediately
-        print(f"🔄 Processing complete segment ({chunk_size_kb:.1f} KB)...")
-        return self._process_segment(chunk)
-    
-    def _remove_overlap(self, new_text: str, old_text: str) -> str:
-        """
-        Remove overlapping text between old and new transcriptions.
-        """
-        if not old_text or not new_text:
-            return new_text
-            
-        old_words = old_text.split()
-        new_words = new_text.split()
-        
-        # Find longest matching suffix of old_text that matches prefix of new_text
-        max_overlap = min(len(old_words), len(new_words))
-        
-        for overlap_len in range(max_overlap, 0, -1):
-            if old_words[-overlap_len:] == new_words[:overlap_len]:
-                return ' '.join(new_words[overlap_len:])
-        
-        return new_text
-    
-    def _process_segment(self, segment_data: bytes) -> str:
-        """Process a complete WebM segment directly - faster_whisper handles WebM via ffmpeg"""
-        webm_file = None
         try:
-            # Save WebM to temp file - faster_whisper can process WebM directly
-            webm_file = self.save_webm_to_temp(segment_data)
+            # Query parameters for Sarvam AI
+            params = "model=saaras:v2.5&sample_rate=16000"
+            full_url = f"{self.ws_url}?{params}"
             
-            print("🎤 Starting Whisper transcription (processing WebM directly)...")
-            start_time = time.time()
+            # Create SSL context with certifi for macOS compatibility
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
             
-            # faster_whisper uses ffmpeg internally and can handle WebM format directly
-            segments, info = self.model.transcribe(
-                webm_file,
-                language="en",
-                vad_filter=True,
-                beam_size=5,
-                temperature=0.0,
-                condition_on_previous_text=False,
-                word_timestamps=False
+            self.ws = await websockets.connect(
+                full_url,
+                additional_headers={"api-subscription-key": self.api_key},
+                ssl=ssl_context
             )
             
-            transcribe_time = time.time() - start_time
-            print(f"📊 Audio: duration={info.duration:.2f}s, language={info.language}, transcribe_time={transcribe_time:.2f}s")
+            # Send initial config
+            config_msg = {
+                "type": "config",
+                "prompt": ""
+            }
+            await self.ws.send(json.dumps(config_msg))
             
-            segment_list = list(segments)
-            segment_texts = [seg.text.strip() for seg in segment_list]
-            current_transcription = " ".join(segment_texts).strip()
-            
-            print(f"📝 Raw transcription: '{current_transcription}' ({len(segment_list)} segments)")
-            
-            if current_transcription:
-                # Remove overlap with previous transcription
-                new_text = self._remove_overlap(current_transcription, self.last_transcription)
-                
-                if new_text:
-                    print(f"✨ New text: '{new_text}'")
-                    self.transcript += " " + new_text if self.transcript else new_text
-                    self.last_transcription = current_transcription
-                    print(f"✓ Total transcript: {len(self.transcript)} chars")
-                    self.last_process_time = time.time()
-                    return new_text.strip()
-                else:
-                    print("⚠ No new text after overlap removal")
-                    self.last_process_time = time.time()
-                    return ""
-            else:
-                print("⚠ Empty transcription (silence or noise)")
-                self.last_process_time = time.time()
-                return ""
-                
+            self.is_connected = True
+            self._receive_task = asyncio.create_task(self._receive_loop())
+            print("✅ Connected to Sarvam AI WebSocket")
+            return True
         except Exception as e:
-            print(f"✗ Processing error: {type(e).__name__}: {e}")
-            import traceback
-            traceback.print_exc()
-            self.last_process_time = time.time()
-            return ""
-        finally:
-            # Clean up temp file
-            if webm_file and os.path.exists(webm_file):
-                os.unlink(webm_file)
+            print(f"❌ Failed to connect to Sarvam AI: {e}")
+            return False
 
-    def finalize(self) -> str:
-        """Return final transcript (no buffering needed since we process segments immediately)"""
-        print(f"🏁 Finalizing transcript...")
+    async def _receive_loop(self):
+        """Loop to receive messages from Sarvam AI."""
+        try:
+            async for message in self.ws:
+                data = json.loads(message)
+                msg_type = data.get("type")
+                
+                if msg_type == "data":
+                    # data format: {"type": "data", "data": {"transcript": "...", "language_code": "..."}}
+                    res_data = data.get("data", {})
+                    new_snippet = res_data.get("transcript", "").strip()
+                    
+                    if new_snippet:
+                        # Logic to handle both incremental and discrete updates
+                        # If new_snippet starts with current_partial, it's likely an incremental update
+                        if self.current_partial and new_snippet.startswith(self.current_partial):
+                            self.current_partial = new_snippet
+                        else:
+                            # It's a new discrete segment or a non-incremental update
+                            # Commit the previous partial to session history
+                            if self.current_partial:
+                                self.session_transcript += (" " if self.session_transcript else "") + self.current_partial
+                            self.current_partial = new_snippet
+                    
+                    # Total transcript = history + current session's partial
+                    full_current = self.session_transcript
+                    if self.current_partial:
+                        full_current += (" " if full_current else "") + self.current_partial
+                    
+                    await self.transcript_queue.put(full_current)
+                    print(f"📥 Received transcript: {new_snippet}")
+                elif msg_type == "error":
+                    print(f"📥 Sarvam AI Error: {data.get('data')}")
+                elif msg_type == "events":
+                    print(f"📥 Sarvam AI Event: {data.get('data')}")
+                    
+        except websockets.ConnectionClosed:
+            print("📥 Sarvam AI WebSocket connection closed")
+        except Exception as e:
+            print(f"📥 Error in Sarvam AI receive loop: {e}")
+        finally:
+            # Commit current partial to session transcript on loop exit (socket closed)
+            if self.current_partial:
+                self.session_transcript += (" " if self.session_transcript else "") + self.current_partial
+                self.current_partial = ""
+            self.is_connected = False
+
+    def _convert_webm_to_wav_base64(self, webm_data: bytes) -> Optional[str]:
+        """Convert WebM to WAV (16kHz, mono) using ffmpeg and return base64 string."""
+        with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as webm_tmp:
+            webm_tmp.write(webm_data)
+            webm_path = webm_tmp.name
+            
+        wav_path = webm_path + ".wav"
+        try:
+            # Convert to 16kHz, mono WAV
+            subprocess.run([
+                "ffmpeg", "-y", "-i", webm_path,
+                "-ar", "16000", "-ac", "1",
+                wav_path
+            ], check=True, capture_output=True)
+            
+            with open(wav_path, "rb") as wav_file:
+                wav_data = wav_file.read()
+                return base64.b64encode(wav_data).decode("utf-8")
+        except Exception as e:
+            print(f"❌ ffmpeg conversion error: {e}")
+            return None
+        finally:
+            if os.path.exists(webm_path): os.unlink(webm_path)
+            if os.path.exists(wav_path): os.unlink(wav_path)
+
+    async def process_audio_chunk(self, chunk: bytes) -> str:
+        """
+        Process audio chunk by sending it to Sarvam AI.
+        Returns the current full transcript.
+        """
+        if not self.is_connected:
+            connected = await self.connect()
+            if not connected: return ""
+
+        self.chunk_count += 1
         
-        self.chunk_count = 0
-        self.last_transcription = ""
+        # Sarvam expects base64 encoded WAV data
+        base64_audio = self._convert_webm_to_wav_base64(chunk)
+        if not base64_audio:
+            return ""
+            
+        try:
+            audio_msg = {
+                "audio": {
+                    "data": base64_audio,
+                    "sample_rate": "16000",
+                    "encoding": "audio/wav"
+                }
+            }
+            await self.ws.send(json.dumps(audio_msg))
+            
+            # Wait a bit for the receive loop to update current_partial
+            # Since Sarvam is streaming, the transcript builds up.
+            await asyncio.sleep(0.1)
+            
+            return self.current_partial
+        except Exception as e:
+            print(f"❌ Error sending audio to Sarvam AI: {e}")
+            return self.current_partial
+
+    async def finalize(self) -> str:
+        """Send flush signal and return final transcript."""
+        if self.is_connected:
+            try:
+                flush_msg = {"type": "flush"}
+                await self.ws.send(json.dumps(flush_msg))
+                
+                # Give it some time to process final bits
+                await asyncio.sleep(1.0)
+                
+                # Final connection close will trigger the commit in _receive_loop's exception handler
+                # but we'll do one final check here to be safe
+                if self.current_partial:
+                    self.session_transcript += (" " if self.session_transcript else "") + self.current_partial
+                    self.current_partial = ""
+                
+                self.transcript = self.session_transcript
+                
+                await self.ws.close()
+            except Exception as e:
+                print(f"❌ Error finalizing Sarvam AI: {e}")
+        else:
+            # If not connected, make sure transcript is set to what we have
+            if self.current_partial:
+                self.session_transcript += (" " if self.session_transcript else "") + self.current_partial
+                self.current_partial = ""
+            self.transcript = self.session_transcript
         
-        final = self.transcript.strip()
-        print(f"✓ Final transcript ({len(final)} chars): '{final}'")
-        return final
-    
+        self.is_connected = False
+        if self._receive_task:
+            self._receive_task.cancel()
+            
+        return self.transcript
+
     def reset(self):
-        """Reset the transcriber state for a new recording"""
+        """Reset the transcriber state."""
         self.transcript = ""
+        self.session_transcript = ""
+        self.current_partial = ""
         self.chunk_count = 0
-        self.last_transcription = ""
         self.last_process_time = time.time()
         print("🔄 Transcriber reset")

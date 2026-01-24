@@ -355,7 +355,11 @@ async def _save_to_mongo_impl(
         Success message
     """
     try:
-        patient_object_id = patient_id
+        # Ensure IDs are in correct format for MongoDB
+        try:
+            patient_object_id = ObjectId(patient_id)
+        except:
+            patient_object_id = patient_id
             
         # Appointment ID can be in custom format "ObjectId-number", use as-is for queries
         # MongoDB will match the exact string if it's stored as a string

@@ -2,7 +2,7 @@ fastapi
 uvicorn[standard]
 pymongo
 python-dotenv
-faster-whisper 
+# faster-whisper (replaced by Sarvam AI)
 soundfile
 pyjwt
 pwdlib[argon2]

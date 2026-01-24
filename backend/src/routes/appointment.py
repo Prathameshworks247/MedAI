@@ -3,6 +3,7 @@ import io
 from bson import ObjectId
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
+import asyncio
 
 from src.models.appointment import AppointmentModel, UpdateAppointmentModel, DiagnosisResponse, PrimaryDiagnosis, DiagnosisItem
 from src.middlewares.auth import check_doctor_exists
@@ -14,6 +15,10 @@ from src.services.tools import extract_clinical_info, _save_to_mongo_impl
 from src.services.diagnosis_generator import generate_diagnosis, build_diagnosis_context, convert_med42_to_structured_json
 from src.services.chatbot_context import verify_doctor_patient_access
 from src.r2 import upload_to_r2
+from pydantic import BaseModel
+
+class FinalizeRecordingRequest(BaseModel):
+    discussion_text: str
 
 router = APIRouter()
 
@@ -424,8 +429,8 @@ async def live_detection(websocket: WebSocket):
             
             current_discussion = appointment.get("discussion", "")
             
-            # Append new text to existing discussion
-            updated_discussion = current_discussion + (" " + text if current_discussion else text)
+            # Sarvam AI returns additive transcript, so we replace instead of appending
+            updated_discussion = text
             
             # Update appointment with new discussion
             result = await appointment_collection.update_one(
@@ -446,6 +451,25 @@ async def live_detection(websocket: WebSocket):
             print(f"✗ Error saving discussion to appointment: {e}")
             import traceback
             traceback.print_exc()
+
+    async def sender_loop():
+        """Listen for transcript updates and send to frontend immediately"""
+        try:
+            while True:
+                partial_text = await transcriber.transcript_queue.get()
+                if partial_text:
+                    # Send to frontend only, do not save to DB while recording
+                    try:
+                        await websocket.send_json({
+                            "type": "partial_transcript",
+                            "text": partial_text
+                        })
+                    except:
+                        break
+        except Exception as e:
+            print(f"Error in sender_loop: {e}")
+
+    sender_task = asyncio.create_task(sender_loop())
     
     try: 
         while True:
@@ -458,23 +482,8 @@ async def live_detection(websocket: WebSocket):
                 break
             
             try:
-                partial_text = transcriber.process_audio_chunk(message)
-                print(f"Discussion result: {partial_text}")
-                
-                if partial_text:
-                    # Save partial discussion to appointment
-                    await save_discussion_to_appointment(partial_text, is_final=False)
-                    
-                    # Try to send, but handle disconnection gracefully
-                    try:
-                        await websocket.send_json({
-                            "type": "partial_transcript",
-                            "text": partial_text
-                        })
-                    except (WebSocketDisconnect, RuntimeError, Exception) as send_error:
-                        print(f"Error sending transcript (connection may be closed): {send_error}")
-                        break  # Exit loop if we can't send
-                        
+                # process_audio_chunk sends to Sarvam, which triggers the sender_loop via the queue
+                await transcriber.process_audio_chunk(message)
             except Exception as e:
                 print(f"Error processing chunk: {e}")
                 import traceback
@@ -489,16 +498,15 @@ async def live_detection(websocket: WebSocket):
         import traceback
         traceback.print_exc()
     finally:
-        # Finalize discussion and save it
+        # Cancel sender task
+        sender_task.cancel()
+        
+        # Finalize discussion
         try:
-            final_text = transcriber.finalize()
+            final_text = await transcriber.finalize()
             print(f"Final discussion: {final_text}")
 
-            # Save final discussion to appointment
-            if final_text:
-                await save_discussion_to_appointment(final_text, is_final=True)            
-
-            # Try to send final discussion, but don't fail if connection is closed
+            # Try to send final discussion to frontend, but don't save to DB here
             try:
                 await websocket.send_json({
                     "type": "final_transcript",
@@ -519,10 +527,11 @@ async def live_detection(websocket: WebSocket):
 
 
 @router.post("/{appointment_id}/finalize-recording")
-async def finalize_recording(appointment_id: str):
+async def finalize_recording(appointment_id: str, request: FinalizeRecordingRequest):
     """
     Finalize the recording for an appointment.
-    Fetches the discussion text and triggers LLM extraction to update discussion_summary.
+    1. Saves the final discussion text to DB.
+    2. Triggers LLM extraction to update discussion_summary.
     """
     try:
         # Get appointment
@@ -537,7 +546,18 @@ async def finalize_recording(appointment_id: str):
                 detail="Appointment not found"
             )
             
-        discussion = appointment.get("discussion", "")
+        discussion = request.discussion_text
+        
+        # Save final discussion to appointment in DB
+        await appointment_collection.update_one(
+            {"_id": appointment["_id"]},
+            {
+                "$set": {
+                    "discussion": discussion,
+                    "updated_at": datetime.now()
+                }
+            }
+        )
         
         patient_id = appointment.get("patient_id")
         if not patient_id:

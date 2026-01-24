@@ -336,16 +336,12 @@ const ActiveSession = () => {
                 try {
                     const data = JSON.parse(event.data);
                     if (data.type === 'partial_transcript') {
-                        // Append partial transcript to existing transcription
-                        setTranscription(prev => {
-                            // Only add space if previous ends with word char (simplistic)
-                            const newText = prev + (prev && !prev.endsWith(' ') ? ' ' : '') + data.text;
-                            return newText;
-                        });
+                        // Sarvam AI returns additive transcript, so we replace instead of appending
+                        setTranscription(data.text);
                         setPartialTranscript(data.text);
                     } else if (data.type === 'final_transcript') {
-                        // Append final transcript to existing transcription
-                        setTranscription(prev => prev + (prev && !prev.endsWith(' ') ? ' ' : '') + data.text);
+                        // Sarvam AI returns additive transcript, so we replace instead of appending
+                        setTranscription(data.text);
                         setPartialTranscript('');
                         console.log('✓ Final transcript received and appended');
                         // Mark transcript as recorded when final transcript is received
@@ -370,9 +366,8 @@ const ActiveSession = () => {
                             // But wait, the timeline view reads from `appointment.session.activities`.
                             // So we SHOULD update it.
 
-                            // Let's iterate:
-                            const currentTrans = prev.session.activities?.[recIndex]?.data?.transcription || "";
-                            const newTrans = currentTrans + (currentTrans ? ' ' : '') + data.text;
+                            // Sarvam AI returns additive transcript, so we replace instead of appending
+                            const newTrans = data.text;
 
                             const newActivity = {
                                 id: 'rec-' + prev.id,
@@ -545,7 +540,8 @@ const ActiveSession = () => {
             setIsRecording(true);
             isRecordingRef.current = true; // Set ref to track recording state
             setRecordingDuration(0);
-            // Do NOT clear transcription if it already exists from DB, but maybe clear partial
+            // Clear current session transcription
+            setTranscription('');
             setPartialTranscript('');
 
             // Start duration timer
@@ -620,9 +616,12 @@ const ActiveSession = () => {
         setIsFinalizing(true);
 
         try {
-            // Call the finalize recording endpoint
+            // Call the finalize recording endpoint with current transcription
             const response = await apiRequest(`/appointments/${appointmentId}/finalize-recording`, {
-                method: 'POST'
+                method: 'POST',
+                body: JSON.stringify({
+                    discussion_text: transcription
+                })
             });
 
             if (response) {
