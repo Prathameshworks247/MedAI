@@ -7,6 +7,8 @@ import {
     Tooltip,
     ResponsiveContainer,
     ReferenceArea,
+    ReferenceLine,
+    Label,
 } from "recharts";
 import { motion } from "framer-motion";
 import { Activity, ArrowRight } from "lucide-react";
@@ -16,6 +18,7 @@ interface DataPoint {
     date: string;
     value: number;
     appointmentNumber: number;
+    is_prediction?: boolean;
 }
 
 interface TestTrendChartProps {
@@ -58,6 +61,9 @@ export function TestTrendChart({
             : "stable";
 
     const change = data[data.length - 1].value - data[0].value;
+
+    const predictionStartIndex = data.findIndex(p => p.is_prediction);
+    const predictionStartPoint = predictionStartIndex !== -1 ? chartData[predictionStartIndex] : null;
 
     return (
         <motion.div
@@ -105,6 +111,22 @@ export function TestTrendChart({
                                     fill="hsl(var(--success))"
                                     fillOpacity={0.1}
                                 />
+                            )}
+
+                            {predictionStartPoint && (
+                                <ReferenceLine
+                                    x={predictionStartPoint.formattedDate}
+                                    stroke="hsl(var(--muted-foreground))"
+                                    strokeDasharray="3 3"
+                                >
+                                    <Label
+                                        value="Prediction Start"
+                                        position="insideTopLeft"
+                                        fill="hsl(var(--muted-foreground))"
+                                        fontSize={10}
+                                        offset={10}
+                                    />
+                                </ReferenceLine>
                             )}
 
                             <XAxis
