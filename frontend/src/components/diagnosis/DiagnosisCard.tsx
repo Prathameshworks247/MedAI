@@ -49,11 +49,11 @@ export function DiagnosisCard({ diagnosis }: DiagnosisCardProps) {
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-card rounded-2xl shadow-sm border border-border/50 p-6 overflow-hidden relative"
+            className="bg-card rounded-2xl shadow-sm border border-border/50 px-10 py-6 overflow-hidden relative"
         >
             <div className="absolute top-0 left-0 w-1 h-full bg-primary" />
 
-            <div className="flex flex-col md:flex-row justify-between items-start gap-6 mb-8">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                 <div className="space-y-3">
                     <div className="space-y-1">
                         <h2 className="text-3xl font-bold text-foreground">
@@ -114,15 +114,13 @@ export function DiagnosisCard({ diagnosis }: DiagnosisCardProps) {
             </div>
 
             {/* Evidence Timeline */}
-            <div className="bg-muted/30 rounded-xl p-5 border border-border/50">
+            {/* <div className="bg-muted/30 rounded-xl p-5 border border-border/50">
                 <h4 className="text-sm font-semibold text-muted-foreground mb-6 uppercase tracking-wider flex items-center gap-2">
                     Documentation Trail
                 </h4>
                 <div className="relative">
-                    {/* Timeline line */}
                     <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-border/60 -translate-y-1/2" />
 
-                    {/* Timeline points */}
                     <div className="flex justify-between items-center relative z-10 px-20">
                         {diagnosis.evidenceChain.map((point, idx) => (
                             <motion.div
@@ -133,7 +131,6 @@ export function DiagnosisCard({ diagnosis }: DiagnosisCardProps) {
                                 className="group relative"
                             >
                                 <div className="flex flex-col items-center">
-                                    {/* Point */}
                                     <motion.div
                                         whileHover={{ scale: 1.15 }}
                                         className={`w-4 h-4 rounded-full border-2 border-card shadow-sm z-10 transition-colors duration-300 ${point.change === "better"
@@ -144,7 +141,6 @@ export function DiagnosisCard({ diagnosis }: DiagnosisCardProps) {
                                             }`}
                                     />
 
-                                    {/* Card tooltip style content */}
                                     <div className="absolute top-8 left-1/2 -translate-x-1/2 w-max max-w-[140px] text-center pt-2 opacity-100 transition-all">
                                         <div className="text-xs font-semibold text-foreground mb-0.5">
                                             {point.value}
@@ -168,7 +164,7 @@ export function DiagnosisCard({ diagnosis }: DiagnosisCardProps) {
                         View Full Evidence Graph <ArrowRight className="w-3.5 h-3.5" />
                     </motion.button>
                 </div>
-            </div>
+            </div> */}
         </motion.div>
     );
 }

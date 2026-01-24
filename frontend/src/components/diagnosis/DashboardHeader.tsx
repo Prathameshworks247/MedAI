@@ -12,7 +12,7 @@ export function DashboardHeader({ patientName, lastUpdated }: DashboardHeaderPro
         <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="relative bg-card rounded-2xl shadow-sm border border-border/40 p-6 mb-8 overflow-hidden group"
+            className="relative bg-card rounded-2xl shadow-sm border border-border/40 p-5 mb-8 overflow-hidden group"
         >
             <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none transition-opacity duration-500 group-hover:opacity-75" />
             <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">

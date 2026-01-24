@@ -14,9 +14,6 @@ const DiagnosisDashboard = ({ data, text }: { data: any, text: string }) => {
 
     if (!data) return null;
 
-    const match = text.match(/^(.*?)ALTERNATIVE DIAGNOSES/s);
-    const primary_diagnosis_text = match ? match[1] : text;
-
     const {
         primary_diagnosis,
         test_trends,
@@ -81,7 +78,7 @@ const DiagnosisDashboard = ({ data, text }: { data: any, text: string }) => {
                         <div className="mb-6 p-4 bg-indigo-50 border border-indigo-100 rounded-lg text-gray-800 font-normal shadow-sm">
                             <div className="prose prose-indigo max-w-none prose-headings:font-bold prose-headings:text-indigo-900 prose-p:leading-relaxed prose-strong:text-indigo-800 prose-ul:list-disc prose-ul:pl-4">
                                 <ReactMarkdown>
-                                    {primary_diagnosis_text}
+                                    {text}
                                 </ReactMarkdown>
                             </div>
                         </div>
@@ -93,7 +90,7 @@ const DiagnosisDashboard = ({ data, text }: { data: any, text: string }) => {
                 {/* Charts & Test Trends - Full Width */}
                 <motion.section variants={sectionVariants} className="space-y-6">
                     <SectionHeader icon={TrendingUp} title="Test Trends Analysis" />
-                    <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {test_trends && Object.keys(test_trends).length > 0 ? (
                             Object.entries(test_trends).map(([key, testData]: [string, any]) => (
                                 <TestTrendChart

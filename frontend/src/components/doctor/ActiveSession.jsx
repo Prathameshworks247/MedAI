@@ -11,43 +11,43 @@ import AppointmentHistoryCard from './AppointmentHistoryCard';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 const RequiredActivities = ({ session }) => (
-    <div className="card mb-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-4">Required Activities</h3>
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border border-gray-100 dark:border-gray-700 mb-6 transition-colors duration-200">
+        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Required Activities</h3>
         <div className="grid grid-cols-3 gap-4">
-            <div className={`p-4 rounded-lg border-2 ${session?.requiredCompleted?.recording ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
+            <div className={`p-4 rounded-lg border-2 transition-all duration-200 ${session?.requiredCompleted?.recording ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-600' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'}`}>
                 <div className="flex items-center space-x-2 mb-2">
                     {session?.requiredCompleted?.recording ? (
-                        <CheckCircle className="w-5 h-5 text-green-600" />
+                        <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
                     ) : (
-                        <Mic className="w-5 h-5 text-gray-400" />
+                        <Mic className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                     )}
-                    <span className="font-semibold text-gray-900">Recording</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">Recording</span>
                 </div>
-                <p className="text-xs text-gray-600">Consultation audio & transcription</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">Consultation audio & transcription</p>
             </div>
 
-            <div className={`p-4 rounded-lg border-2 ${session?.requiredCompleted?.documents ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
+            <div className={`p-4 rounded-lg border-2 transition-all duration-200 ${session?.requiredCompleted?.documents ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-600' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'}`}>
                 <div className="flex items-center space-x-2 mb-2">
                     {session?.requiredCompleted?.documents ? (
-                        <CheckCircle className="w-5 h-5 text-green-600" />
+                        <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
                     ) : (
-                        <FileCheck className="w-5 h-5 text-gray-400" />
+                        <FileCheck className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                     )}
-                    <span className="font-semibold text-gray-900">Documents</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">Documents</span>
                 </div>
-                <p className="text-xs text-gray-600">Handwritten clinical notes</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">Handwritten clinical notes</p>
             </div>
 
-            <div className={`p-4 rounded-lg border-2 ${session?.requiredCompleted?.report ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
+            <div className={`p-4 rounded-lg border-2 transition-all duration-200 ${session?.requiredCompleted?.report ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-600' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'}`}>
                 <div className="flex items-center space-x-2 mb-2">
                     {session?.requiredCompleted?.report ? (
-                        <CheckCircle className="w-5 h-5 text-green-600" />
+                        <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
                     ) : (
-                        <FileText className="w-5 h-5 text-gray-400" />
+                        <FileText className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                     )}
-                    <span className="font-semibold text-gray-900">Clinical Report</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">Clinical Report</span>
                 </div>
-                <p className="text-xs text-gray-600">AI-generated SOAP report</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">AI-generated SOAP report</p>
             </div>
         </div>
     </div>

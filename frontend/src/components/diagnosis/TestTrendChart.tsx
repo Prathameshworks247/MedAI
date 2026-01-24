@@ -60,8 +60,6 @@ export function TestTrendChart({
                     : "stable"
             : "stable";
 
-    const change = data[data.length - 1].value - data[0].value;
-
     const predictionStartIndex = data.findIndex(p => p.is_prediction);
     const predictionStartPoint = predictionStartIndex !== -1 ? chartData[predictionStartIndex] : null;
 
@@ -69,7 +67,7 @@ export function TestTrendChart({
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-card rounded-2xl shadow-sm border border-border/50 p-6 flex flex-col h-full"
+            className="bg-card rounded-2xl shadow-sm border border-border/50 p-6 flex flex-col"
         >
             <div className="flex justify-between items-start mb-6">
                 <div>
