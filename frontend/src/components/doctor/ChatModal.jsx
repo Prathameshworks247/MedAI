@@ -634,135 +634,137 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
                     {!isHistoryOpen && (
                         <div className="flex-1 flex flex-col">
                             {/* Messages */}
-                            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                                {messages.map((message, index) => (
-                                    <div
-                                        key={index}
-                                        className={`flex items-start space-x-3 ${message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''
-                                            }`}
-                                    >
+                            <div className="flex-1 overflow-y-auto">
+                                <div className="max-w-4xl mx-auto px-6 py-4 space-y-4">
+                                    {messages.map((message, index) => (
                                         <div
-                                            className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${message.role === 'assistant'
-                                                ? 'bg-green-100 dark:bg-green-900/30'
-                                                : 'bg-blue-100 dark:bg-blue-900/30'
+                                            key={index}
+                                            className={`flex items-start space-x-3 ${message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''
                                                 }`}
                                         >
-                                            {message.role === 'assistant' ? (
-                                                <Bot className="w-5 h-5 text-green-600 dark:text-green-400" />
-                                            ) : (
-                                                <User className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                                            )}
-                                        </div>
-                                        <div className={`flex-1 ${message.role === 'user' ? 'items-end' : ''}`}>
                                             <div
-                                                className={`inline-block max-w-[80%] p-3 rounded-lg ${message.role === 'assistant'
-                                                    ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
-                                                    : 'bg-blue-600 dark:bg-blue-500 text-white'
-                                                    } ${message.error ? 'bg-red-100 dark:bg-red-900/30 text-red-900 dark:text-red-200' : ''}`}
+                                                className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${message.role === 'assistant'
+                                                    ? 'bg-green-100 dark:bg-green-900/30'
+                                                    : 'bg-blue-100 dark:bg-blue-900/30'
+                                                    }`}
                                             >
-                                                <ReactMarkdown>{message.content}</ReactMarkdown>
-                                                {Array.isArray(message.citations) && message.citations.length > 0 ? (
-                                                    <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-600">
-                                                        <p className="text-xs font-semibold mb-1 dark:text-gray-300">Sources:</p>
-                                                        <div className="space-y-1">
-                                                            {message.citations.map((citation, idx) => (
-                                                                <div
-                                                                    key={idx}
-                                                                    onClick={async () => {
-                                                                        const docId = citation.document_id || pdfDocumentId;
-                                                                        console.log('Citation clicked:', {
-                                                                            docId,
-                                                                            hasPdfFile: !!uploadedPdfFile,
-                                                                            pageNumber: citation.page_number,
-                                                                            citation
-                                                                        });
+                                                {message.role === 'assistant' ? (
+                                                    <Bot className="w-5 h-5 text-green-600 dark:text-green-400" />
+                                                ) : (
+                                                    <User className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                                )}
+                                            </div>
+                                            <div className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
+                                                <div
+                                                    className={`max-w-lg p-3 rounded-lg ${message.role === 'assistant'
+                                                        ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                                                        : 'bg-blue-600 dark:bg-blue-500 text-white'
+                                                        } ${message.error ? 'bg-red-100 dark:bg-red-900/30 text-red-900 dark:text-red-200' : ''}`}
+                                                >
+                                                    <ReactMarkdown>{message.content}</ReactMarkdown>
+                                                    {Array.isArray(message.citations) && message.citations.length > 0 ? (
+                                                        <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-600">
+                                                            <p className="text-xs font-semibold mb-1 dark:text-gray-300">Sources:</p>
+                                                            <div className="space-y-1">
+                                                                {message.citations.map((citation, idx) => (
+                                                                    <div
+                                                                        key={idx}
+                                                                        onClick={async () => {
+                                                                            const docId = citation.document_id || pdfDocumentId;
+                                                                            console.log('Citation clicked:', {
+                                                                                docId,
+                                                                                hasPdfFile: !!uploadedPdfFile,
+                                                                                pageNumber: citation.page_number,
+                                                                                citation
+                                                                            });
 
-                                                                        if (!docId) {
-                                                                            console.warn('No document ID available for citation');
-                                                                            return;
-                                                                        }
-
-                                                                        let fileToUse = uploadedPdfFile;
-
-                                                                        // If we have a docId but no file, or a different file is loaded, load the correct one
-                                                                        if (!fileToUse || (pdfDocumentId && pdfDocumentId !== docId)) {
-                                                                            console.log('Loading PDF for citation:', docId);
-                                                                            fileToUse = await loadPdfFromBackend(docId);
-                                                                            if (fileToUse) {
-                                                                                setPdfDocumentId(docId);
+                                                                            if (!docId) {
+                                                                                console.warn('No document ID available for citation');
+                                                                                return;
                                                                             }
-                                                                        }
 
-                                                                        if (fileToUse && citation.page_number) {
-                                                                            setViewerPage(citation.page_number);
-                                                                            setViewerCoordinates(citation.coordinates || null);
-                                                                            setShowPdfViewer(true);
-                                                                        }
-                                                                    }}
-                                                                    className={`text-xs bg-white/50 dark:bg-gray-800/50 rounded p-2 transition-colors border border-transparent ${(citation.document_id || pdfDocumentId) && citation.page_number
-                                                                        ? 'hover:bg-blue-50 dark:hover:bg-blue-900/30 cursor-pointer hover:border-blue-300 dark:hover:border-blue-600'
-                                                                        : 'text-gray-600 dark:text-gray-400'
-                                                                        }`}
-                                                                    title={(citation.document_id || pdfDocumentId) && citation.page_number ? "Click to view in PDF" : "PDF not available"}
-                                                                >
-                                                                    <div className="flex items-start justify-between gap-2">
-                                                                        <div className="flex-1 min-w-0">
-                                                                            <p className="font-semibold flex items-center dark:text-gray-200">
-                                                                                {loadingPdfId === (citation.document_id || pdfDocumentId) ? (
-                                                                                    <Loader className="w-3 h-3 mr-1 animate-spin text-blue-600 dark:text-blue-400" />
-                                                                                ) : (
-                                                                                    <FileText className="w-3 h-3 mr-1 flex-shrink-0" />
-                                                                                )}
-                                                                                <span className="truncate">
-                                                                                    {citation.page_number ? `Page ${citation.page_number}` : 'Citation'}
-                                                                                </span>
-                                                                            </p>
-                                                                            {citation.text_preview && (
-                                                                                <p className="text-gray-600 dark:text-gray-400 break-words mt-1 line-clamp-2">
-                                                                                    {citation.text_preview}
+                                                                            let fileToUse = uploadedPdfFile;
+
+                                                                            // If we have a docId but no file, or a different file is loaded, load the correct one
+                                                                            if (!fileToUse || (pdfDocumentId && pdfDocumentId !== docId)) {
+                                                                                console.log('Loading PDF for citation:', docId);
+                                                                                fileToUse = await loadPdfFromBackend(docId);
+                                                                                if (fileToUse) {
+                                                                                    setPdfDocumentId(docId);
+                                                                                }
+                                                                            }
+
+                                                                            if (fileToUse && citation.page_number) {
+                                                                                setViewerPage(citation.page_number);
+                                                                                setViewerCoordinates(citation.coordinates || null);
+                                                                                setShowPdfViewer(true);
+                                                                            }
+                                                                        }}
+                                                                        className={`text-xs bg-white/50 dark:bg-gray-800/50 rounded p-2 transition-colors border border-transparent ${(citation.document_id || pdfDocumentId) && citation.page_number
+                                                                            ? 'hover:bg-blue-50 dark:hover:bg-blue-900/30 cursor-pointer hover:border-blue-300 dark:hover:border-blue-600'
+                                                                            : 'text-gray-600 dark:text-gray-400'
+                                                                            }`}
+                                                                        title={(citation.document_id || pdfDocumentId) && citation.page_number ? "Click to view in PDF" : "PDF not available"}
+                                                                    >
+                                                                        <div className="flex items-start justify-between gap-2">
+                                                                            <div className="flex-1 min-w-0">
+                                                                                <p className="font-semibold flex items-center dark:text-gray-200">
+                                                                                    {loadingPdfId === (citation.document_id || pdfDocumentId) ? (
+                                                                                        <Loader className="w-3 h-3 mr-1 animate-spin text-blue-600 dark:text-blue-400" />
+                                                                                    ) : (
+                                                                                        <FileText className="w-3 h-3 mr-1 flex-shrink-0" />
+                                                                                    )}
+                                                                                    <span className="truncate">
+                                                                                        {citation.page_number ? `Page ${citation.page_number}` : 'Citation'}
+                                                                                    </span>
                                                                                 </p>
+                                                                                {citation.text_preview && (
+                                                                                    <p className="text-gray-600 dark:text-gray-400 break-words mt-1 line-clamp-2">
+                                                                                        {citation.text_preview}
+                                                                                    </p>
+                                                                                )}
+                                                                            </div>
+                                                                            {(citation.document_id || pdfDocumentId) && citation.page_number && (
+                                                                                <Eye className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
                                                                             )}
                                                                         </div>
-                                                                        {(citation.document_id || pdfDocumentId) && citation.page_number && (
-                                                                            <Eye className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-                                                                        )}
                                                                     </div>
-                                                                </div>
-                                                            ))}
+                                                                ))}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                ) : message.role === 'assistant' && message.intent === 'pdf_query' ? (
-                                                    <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-600">
-                                                        <p className="text-xs text-gray-500 dark:text-gray-400 italic">No citations found for this answer.</p>
-                                                    </div>
-                                                ) : null}
-                                            </div>
-                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                                {message.timestamp
-                                                    ? new Date(message.timestamp).toLocaleTimeString([], {
-                                                        hour: '2-digit',
-                                                        minute: '2-digit',
-                                                    })
-                                                    : ''}
-                                            </p>
-                                        </div>
-                                    </div>
-                                ))}
-                                {isLoading && (
-                                    <div className="flex items-start space-x-3">
-                                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                                            <Bot className="w-5 h-5 text-green-600 dark:text-green-400" />
-                                        </div>
-                                        <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
-                                            <div className="flex space-x-1">
-                                                <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                                                <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                                                <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                                    ) : message.role === 'assistant' && message.intent === 'pdf_query' ? (
+                                                        <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-600">
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400 italic">No citations found for this answer.</p>
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                    {message.timestamp
+                                                        ? new Date(message.timestamp).toLocaleTimeString([], {
+                                                            hour: '2-digit',
+                                                            minute: '2-digit',
+                                                        })
+                                                        : ''}
+                                                </p>
                                             </div>
                                         </div>
-                                    </div>
-                                )}
-                                <div ref={messagesEndRef} />
+                                    ))}
+                                    {isLoading && (
+                                        <div className="flex items-start space-x-3">
+                                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                                                <Bot className="w-5 h-5 text-green-600 dark:text-green-400" />
+                                            </div>
+                                            <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
+                                                <div className="flex space-x-1">
+                                                    <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                                    <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                                    <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div ref={messagesEndRef} />
+                                </div>
                             </div>
 
                             {/* Input Area */}

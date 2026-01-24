@@ -6,7 +6,7 @@ from langchain.tools import tool  # pyright: ignore[reportMissingImports]
 from langchain_core.tools import StructuredTool  # pyright: ignore[reportMissingImports]
 from langchain_core.output_parsers import PydanticOutputParser  # pyright: ignore[reportMissingImports]
 from langchain_core.prompts import ChatPromptTemplate  # pyright: ignore[reportMissingImports]
-from typing import Dict, List, Any
+from typing import Dict, Any
 import json
 from bson import ObjectId
 from datetime import datetime
@@ -30,7 +30,6 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
         Dictionary with the following schema:
         {
             "appointment_updates": {
-                "chief_complaint": str,
                 "diagnosis": dict,
                 "discussion_summary": str,
                 "status": "scheduled" | "in_progress" | "paused" | "completed" | "cancelled"
@@ -89,7 +88,6 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
     EXTRACTION GUIDELINES:
 
     1. appointment_updates (dict):
-    - chief_complaint: Main reason for visit (string)
     - diagnosis: Structured diagnosis object with codes, descriptions (dict)
     - discussion_summary: Brief summary of consultation (string). ONLY update this if a discussion is explicitly passed in the document_text. DO NOT generate a summary from reports or tests.
     - status: Current appointment status (one of: scheduled, in_progress, paused, completed, cancelled)
