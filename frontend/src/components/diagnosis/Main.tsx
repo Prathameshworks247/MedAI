@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { Activity, Brain, LayoutDashboard, TrendingUp, AlertTriangle, Network } from "lucide-react";
@@ -8,9 +8,11 @@ import { TestTrendChart } from "./TestTrendChart";
 import { ProgressComparison } from "./ProgressComparison";
 import { RiskScoreVisual } from "./RiskScoreVisual";
 import { ClinicalReasoningModal } from "./ClinicalReasoningModal";
+import { exportComponentAsPDF } from "../../utils/pdfExport";
 
 const DiagnosisDashboard = ({ data, text }: { data: any, text: string }) => {
     const [isReasoningModalOpen, setIsReasoningModalOpen] = useState(false);
+    const dashboardContentRef = useRef<HTMLDivElement>(null);
 
     if (!data) return null;
 
@@ -45,6 +47,21 @@ const DiagnosisDashboard = ({ data, text }: { data: any, text: string }) => {
         show: { opacity: 1, y: 0 }
     };
 
+    const handleExportPDF = async () => {
+        if (dashboardContentRef.current) {
+            const patientName = patient?.name || "Patient";
+            const sanitizedName = patientName.replace(/[^a-zA-Z0-9]/g, '_');
+            const dateStr = new Date().toISOString().split('T')[0];
+            const filename = `diagnosis-${sanitizedName}-${dateStr}`;
+            
+            await exportComponentAsPDF(
+                dashboardContentRef as React.RefObject<HTMLElement>,
+                filename,
+                { backgroundColor: '#ffffff' }
+            );
+        }
+    };
+
     return (
         <motion.div
             variants={containerVariants}
@@ -52,10 +69,11 @@ const DiagnosisDashboard = ({ data, text }: { data: any, text: string }) => {
             animate="show"
             className="min-h-screen bg-background/50 p-6 md:p-8"
         >
-            <div className="max-w-7xl mx-auto space-y-8">
+            <div ref={dashboardContentRef} className="max-w-7xl mx-auto space-y-8">
                 <DashboardHeader
                     patientName={patient?.name || "Patient"}
                     lastUpdated={patient?.last_updated ? new Date(patient.last_updated).toLocaleString() : new Date().toLocaleString()}
+                    onExportClick={handleExportPDF}
                 />
 
                 {/* Primary Diagnosis & AI Analysis */}

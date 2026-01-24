@@ -4,9 +4,10 @@ import { TestTrendChart } from "../components/diagnosis/TestTrendChart";
 import { ProgressComparison } from "../components/diagnosis/ProgressComparison";
 import { RiskScoreVisual } from "../components/diagnosis/RiskScoreVisual";
 import { ClinicalReasoningFlow } from "../components/diagnosis/ClinicalReasoningFlow";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { apiRequest } from "../utils/api";
+import { exportComponentAsPDF } from "../utils/pdfExport";
 
 // Type definitions matching backend JSON schema
 interface DiagnosisData {
@@ -80,6 +81,7 @@ const DiagnosisDashboard = () => {
     const [med42Text, setMed42Text] = useState<string>("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const dashboardContentRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const fetchDiagnosis = async () => {
@@ -185,12 +187,28 @@ const DiagnosisDashboard = () => {
         }
     };
 
+    const handleExportPDF = async () => {
+        if (dashboardContentRef.current) {
+            const patientName = diagnosisData.patient.name;
+            const sanitizedName = patientName.replace(/[^a-zA-Z0-9]/g, '_');
+            const dateStr = new Date().toISOString().split('T')[0];
+            const filename = `diagnosis-${sanitizedName}-${dateStr}`;
+            
+            await exportComponentAsPDF(
+                dashboardContentRef as React.RefObject<HTMLElement>,
+                filename,
+                { backgroundColor: '#ffffff' }
+            );
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 lg:p-8 transition-colors duration-200">
-            <div className="max-w-7xl mx-auto">
+            <div ref={dashboardContentRef} className="max-w-7xl mx-auto">
                 <DashboardHeader
                     patientName={diagnosisData.patient.name}
                     lastUpdated={formatLastUpdated(diagnosisData.patient.last_updated)}
+                    onExportClick={handleExportPDF}
                 />
 
                 {/* Primary Diagnosis */}

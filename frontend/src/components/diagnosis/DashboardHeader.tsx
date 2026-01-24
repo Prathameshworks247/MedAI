@@ -5,9 +5,10 @@ import React from "react";
 interface DashboardHeaderProps {
     patientName: string;
     lastUpdated: string;
+    onExportClick?: () => void;
 }
 
-export function DashboardHeader({ patientName, lastUpdated }: DashboardHeaderProps) {
+export function DashboardHeader({ patientName, lastUpdated, onExportClick }: DashboardHeaderProps) {
     return (
         <motion.div
             initial={{ opacity: 0, y: -20 }}
@@ -31,7 +32,7 @@ export function DashboardHeader({ patientName, lastUpdated }: DashboardHeaderPro
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                    <ActionButton icon={FileText} label="Export PDF" variant="primary" />
+                    <ActionButton icon={FileText} label="Export PDF" variant="primary" onClick={onExportClick} />
                     <ActionButton icon={Share2} label="Share" variant="secondary" />
                     <ActionButton icon={Calendar} label="Follow-up" variant="secondary" />
                 </div>
@@ -40,11 +41,12 @@ export function DashboardHeader({ patientName, lastUpdated }: DashboardHeaderPro
     );
 }
 
-function ActionButton({ icon: Icon, label, variant }: { icon: any, label: string, variant: 'primary' | 'secondary' }) {
+function ActionButton({ icon: Icon, label, variant, onClick }: { icon: any, label: string, variant: 'primary' | 'secondary', onClick?: () => void }) {
     return (
         <motion.button
             whileHover={{ scale: 1.02, y: -1 }}
             whileTap={{ scale: 0.98 }}
+            onClick={onClick}
             className={`
         inline-flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all shadow-sm
         ${variant === 'primary'

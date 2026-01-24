@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
     Calendar,
     Clock,
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import ChatModal from './ChatModal';
 import DiagnosisDashboard from '../diagnosis/Main';
+import { exportComponentAsPDF } from '../../utils/pdfExport';
 
 const AppointmentHistoryCard = ({
     appointment,
@@ -22,9 +23,41 @@ const AppointmentHistoryCard = ({
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
+    const cardRef = useRef(null);
 
     const session = appointment.session;
     const appointmentNo = appointment.id.split('-')[1];
+
+    const handleExportPDF = async () => {
+        // Ensure card is expanded to capture all details
+        if (!isExpanded && session) {
+            setIsExpanded(true);
+            // Wait for React to re-render and DOM to update
+            // Use multiple animation frames to ensure expansion is complete
+            await new Promise(resolve => {
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        setTimeout(resolve, 500); // Additional delay for animations
+                    });
+                });
+            });
+        } else if (isExpanded) {
+            // Even if already expanded, wait a bit to ensure everything is rendered
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        if (cardRef.current) {
+            const appointmentType = appointmentNo == 0 ? 'baseline' : `followup-${appointmentNo}`;
+            const dateStr = new Date().toISOString().split('T')[0];
+            const filename = `appointment-${appointmentType}-${dateStr}`;
+            
+            await exportComponentAsPDF(
+                cardRef,
+                filename,
+                { backgroundColor: '#ffffff' }
+            );
+        }
+    };
 
     const getStatusBadge = (status) => {
         const badges = {
@@ -39,7 +72,10 @@ const AppointmentHistoryCard = ({
 
     return (
         <>
-            <div className={`bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border border-gray-100 dark:border-gray-700 transition-all duration-200 ${isExpanded ? 'ring-2 ring-primary-500 dark:ring-primary-400 shadow-lg' : 'hover:shadow-lg'}`}>
+            <div 
+                ref={cardRef}
+                className={`bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border border-gray-100 dark:border-gray-700 transition-all duration-200 ${isExpanded ? 'ring-2 ring-primary-500 dark:ring-primary-400 shadow-lg' : 'hover:shadow-lg'}`}
+            >
                 {/* Appointment Header */}
                 <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
@@ -102,7 +138,10 @@ const AppointmentHistoryCard = ({
                                 View Chats
                             </button>
 
-                            <button className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold py-2 px-4 rounded-lg transition-all duration-200 flex items-center shadow-sm hover:shadow-md">
+                            <button 
+                                onClick={handleExportPDF}
+                                className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold py-2 px-4 rounded-lg transition-all duration-200 flex items-center shadow-sm hover:shadow-md"
+                            >
                                 <Download className="w-4 h-4 mr-2" />
                                 Export
                             </button>
