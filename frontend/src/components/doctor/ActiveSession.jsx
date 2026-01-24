@@ -928,29 +928,26 @@ const ActiveSession = () => {
         }
     };
 
+    const [savingDoctorDiagnosis, setSavingDoctorDiagnosis] = useState(false);
+
     // Handle doctor's diagnosis file upload
     const handleDoctorDiagnosisFileUpload = async (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
 
-        setUploadingDoctorDiagnosis(true);
-        try {
-            // TODO: Implement API call when route is ready
-            // For now, just store locally
-            const uploadedFileList = files.map(file => ({
-                name: file.name,
-                file: file,
-                uploaded: false
-            }));
-            setDoctorDiagnosisFiles(prev => [...prev, ...uploadedFileList]);
-            alert(`Files selected: ${files.map(f => f.name).join(', ')}. Upload will be implemented when route is ready.`);
-        } catch (error) {
-            console.error('Error uploading doctor diagnosis files:', error);
-            alert(`Error uploading files: ${error.message}`);
-        } finally {
-            setUploadingDoctorDiagnosis(false);
-            e.target.value = '';
-        }
+        const newFiles = files.map(file => ({
+            name: file.name,
+            file: file,
+            uploaded: false,
+            id: 'doc-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9)
+        }));
+        
+        setDoctorDiagnosisFiles(prev => [...prev, ...newFiles]);
+        e.target.value = '';
+    };
+
+    const handleRemoveDoctorDiagnosisFile = (fileId) => {
+        setDoctorDiagnosisFiles(prev => prev.filter(f => f.id !== fileId));
     };
 
     // Handle saving doctor's diagnosis
@@ -960,20 +957,73 @@ const ActiveSession = () => {
             return;
         }
 
+        setSavingDoctorDiagnosis(true);
         try {
-            // TODO: Implement API call when route is ready
-            // const response = await apiRequest(`/appointments/${appointmentId}/doctor-diagnosis`, {
-            //     method: 'POST',
-            //     body: JSON.stringify({
-            //         diagnosis_text: doctorDiagnosisText,
-            //         files: doctorDiagnosisFiles
-            //     })
-            // });
-            console.log('Save doctor diagnosis clicked - route not implemented yet');
-            alert('Save Doctor Diagnosis feature will be available soon.');
+            let newlyUploadedFiles = [];
+
+            // Step 1: Upload new files if any
+            const filesToUpload = doctorDiagnosisFiles.filter(f => !f.uploaded).map(f => f.file);
+            
+            if (filesToUpload.length > 0) {
+                const formData = new FormData();
+                filesToUpload.forEach(file => {
+                    formData.append('files', file);
+                });
+
+                // Use fetch directly for multipart/form-data
+                const token = localStorage.getItem('access_token');
+                const uploadResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/appointments/${appointmentId}/upload-diagnosis-files`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+
+                const uploadData = await uploadResponse.json();
+                
+                if (uploadData.success) {
+                    newlyUploadedFiles = [...uploadData.files];
+                } else {
+                    throw new Error(uploadData.detail || 'Failed to upload files');
+                }
+            }
+
+            // Step 2: Combine with existing files if it's an update
+            const existingFiles = appointment.doctor_diagnosis?.files || [];
+            const finalFiles = [...existingFiles, ...newlyUploadedFiles];
+
+            // Step 3: Save diagnosis data
+            const response = await apiRequest(`/appointments/${appointmentId}/doctor-diagnosis`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    diagnosis_text: doctorDiagnosisText,
+                    files: finalFiles
+                })
+            });
+
+            if (response.success) {
+                alert('Diagnosis saved successfully!');
+                // Update local state to reflect the saved data
+                setAppointment(prev => ({
+                    ...prev,
+                    doctor_diagnosis: {
+                        text: doctorDiagnosisText,
+                        files: finalFiles,
+                        submitted_at: new Date().toISOString()
+                    }
+                }));
+                // Clear the input states
+                setDoctorDiagnosisText('');
+                setDoctorDiagnosisFiles([]);
+            } else {
+                throw new Error(response.error || 'Failed to save diagnosis');
+            }
         } catch (error) {
             console.error('Error saving doctor diagnosis:', error);
-            alert('An error occurred while saving diagnosis.');
+            alert(`An error occurred while saving diagnosis: ${error.message}`);
+        } finally {
+            setSavingDoctorDiagnosis(false);
         }
     };
 
@@ -1069,8 +1119,8 @@ const ActiveSession = () => {
                             activities: activities,
                             requiredCompleted: {
                                 recording: !!(apiData.discussion && apiData.discussion.trim().length > 0),
-                                documents: false,
-                                report: false
+                                documents: !!(apiData.reports && apiData.reports.length > 0),
+                                report: !!apiData.diagnosis_generated_at
                             }
                         }
                     };
@@ -1315,135 +1365,224 @@ const ActiveSession = () => {
             {/* Doctor's Diagnosis Section - Show after AI diagnosis is generated */}
             {appointment.diagnosis_generated_at && (
                 <div className="card mt-6 border-2 border-green-200 bg-green-50">
-                    <div className="mb-6 border-b border-green-200 pb-5">
-                        <h3 className="text-2xl font-bold text-gray-900 flex items-center mb-2">
-                            <Stethoscope className="w-6 h-6 mr-3 text-green-600" />
-                            Doctor's Diagnosis
-                        </h3>
-                        <p className="text-base text-gray-700 mt-2">
-                            Provide your clinical diagnosis, notes, and supporting documents
-                        </p>
-                    </div>
-
-                    {/* Diagnosis Text Input */}
-                    <div className="mb-8">
-                        <label htmlFor="doctor-diagnosis-text" className="block text-lg font-bold text-gray-800 mb-3">
-                            Diagnosis Notes
-                        </label>
-                        <textarea
-                            id="doctor-diagnosis-text"
-                            value={doctorDiagnosisText}
-                            onChange={(e) => setDoctorDiagnosisText(e.target.value)}
-                            placeholder="Enter your clinical diagnosis, observations, treatment plan, and any additional notes..."
-                            className="w-full px-5 py-4 text-base border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-y min-h-[200px] leading-relaxed"
-                            rows={8}
-                            style={{ fontSize: '16px', lineHeight: '1.6' }}
-                        />
-                        <p className="text-sm text-gray-600 mt-2">
-                            Include your clinical assessment, differential diagnosis, treatment recommendations, and follow-up plans.
-                        </p>
-                    </div>
-
-                    {/* Diagnosis File Upload */}
-                    <div className="mb-8">
-                        <label className="block text-lg font-bold text-gray-800 mb-3">
-                            Supporting Documents
-                        </label>
-                        <p className="text-base text-gray-700 mb-4">
-                            Upload clinical notes, images, or other supporting documents for your diagnosis
-                        </p>
-                        <input
-                            type="file"
-                            id="doctor-diagnosis-files"
-                            multiple
-                            accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.dicom"
-                            onChange={handleDoctorDiagnosisFileUpload}
-                            className="hidden"
-                            disabled={uploadingDoctorDiagnosis}
-                        />
-                        <label
-                            htmlFor="doctor-diagnosis-files"
-                            className={`btn-secondary w-full flex items-center justify-center cursor-pointer py-3 text-base font-semibold ${uploadingDoctorDiagnosis ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                            {uploadingDoctorDiagnosis ? (
-                                <>
-                                    <Loader className="w-5 h-5 mr-3 animate-spin" />
-                                    Uploading...
-                                </>
-                            ) : (
-                                <>
-                                    <Upload className="w-5 h-5 mr-3" />
-                                    Upload Supporting Documents
-                                </>
-                            )}
-                        </label>
-
-                        {/* Display uploaded files */}
-                        {doctorDiagnosisFiles.length > 0 && (
-                            <div className="mt-5">
-                                <h4 className="text-base font-bold text-gray-800 mb-3">Uploaded Files:</h4>
-                                <div className="space-y-3">
-                                    {doctorDiagnosisFiles.map((file, idx) => (
-                                        <div key={idx} className="flex items-center justify-between bg-white border-2 border-gray-200 rounded-lg p-4 hover:border-green-300 transition-colors">
-                                            <div className="flex items-center space-x-3 overflow-hidden flex-1">
-                                                <FileText className="w-5 h-5 text-gray-500 flex-shrink-0" />
-                                                <span className="text-base text-gray-800 truncate font-medium" title={file.name}>
-                                                    {file.name}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center space-x-3 ml-4">
-                                                {file.uri ? (
-                                                    <a
-                                                        href={file.uri}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded transition-colors"
-                                                        title="View Document"
-                                                    >
-                                                        <Eye className="w-5 h-5" />
-                                                    </a>
-                                                ) : (
-                                                    <CheckCircle className="w-5 h-5 text-green-600" />
-                                                )}
-                                                <button
-                                                    onClick={() => {
-                                                        setDoctorDiagnosisFiles(prev => prev.filter((_, i) => i !== idx));
-                                                    }}
-                                                    className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded transition-colors text-xl font-bold"
-                                                    title="Remove File"
-                                                >
-                                                    ×
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
+                    <div className="mb-6 border-b border-green-200 pb-5 flex items-center justify-between">
+                        <div>
+                            <h3 className="text-2xl font-bold text-gray-900 flex items-center mb-2">
+                                <Stethoscope className="w-6 h-6 mr-3 text-green-600" />
+                                Doctor's Diagnosis
+                            </h3>
+                            <p className="text-base text-gray-700 mt-2">
+                                Provide your clinical diagnosis, notes, and supporting documents
+                            </p>
+                        </div>
+                        {appointment.doctor_diagnosis?.submitted_at && (
+                            <div className="bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-bold flex items-center border border-green-200">
+                                <CheckCircle className="w-4 h-4 mr-2" />
+                                Saved on {new Date(appointment.doctor_diagnosis.submitted_at).toLocaleString()}
                             </div>
                         )}
                     </div>
 
-                    {/* Save Button */}
-                    <div className="flex justify-end space-x-4 pt-5 border-t-2 border-green-200">
-                        <button
-                            onClick={() => {
-                                setDoctorDiagnosisText('');
-                                setDoctorDiagnosisFiles([]);
-                            }}
-                            className="btn-secondary px-6 py-3 text-base font-semibold"
-                        >
-                            Clear
-                        </button>
-                        <button
-                            onClick={handleSaveDoctorDiagnosis}
-                            disabled={!doctorDiagnosisText.trim() && doctorDiagnosisFiles.length === 0}
-                            className={`px-8 py-3 rounded-lg font-semibold transition-all flex items-center text-base ${doctorDiagnosisText.trim() || doctorDiagnosisFiles.length > 0
-                                ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl'
-                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                }`}
-                        >
-                            <CheckCircle className="w-5 h-5 mr-2" />
-                            Save Diagnosis
-                        </button>
+                    {/* Display Saved Diagnosis if it exists */}
+                    {appointment.doctor_diagnosis && (
+                        <div className="mb-8 bg-white p-6 rounded-lg border border-green-200 shadow-sm">
+                            <h4 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Saved Clinical Notes:</h4>
+                            <div className="text-gray-800 whitespace-pre-wrap leading-relaxed mb-6" style={{ fontSize: '16px' }}>
+                                {appointment.doctor_diagnosis.text || "No clinical notes provided."}
+                            </div>
+                            
+                                    {appointment.doctor_diagnosis.files && appointment.doctor_diagnosis.files.length > 0 && (
+                                        <div>
+                                            <h4 className="text-base font-bold text-gray-800 mb-3">Saved Supporting Documents:</h4>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                {appointment.doctor_diagnosis.files.map((file, idx) => (
+                                                    <div key={idx} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-3 hover:bg-gray-100 transition-colors">
+                                                        <div className="flex items-center space-x-3 overflow-hidden">
+                                                            <FileText className="w-5 h-5 text-indigo-500 flex-shrink-0" />
+                                                            <span className="text-sm text-gray-800 truncate font-medium" title={file.name}>
+                                                                {file.name}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center space-x-2">
+                                                            <a
+                                                                href={file.uri}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="text-indigo-600 hover:text-indigo-800 p-2 hover:bg-indigo-50 rounded transition-colors"
+                                                                title="View Document"
+                                                            >
+                                                                <Eye className="w-5 h-5" />
+                                                            </a>
+                                                            <button
+                                                                onClick={async () => {
+                                                                    if (confirm(`Are you sure you want to remove ${file.name}?`)) {
+                                                                        const updatedFiles = appointment.doctor_diagnosis.files.filter((_, i) => i !== idx);
+                                                                        try {
+                                                                            const response = await apiRequest(`/appointments/${appointmentId}/doctor-diagnosis`, {
+                                                                                method: 'POST',
+                                                                                body: JSON.stringify({
+                                                                                    diagnosis_text: appointment.doctor_diagnosis.text,
+                                                                                    files: updatedFiles
+                                                                                })
+                                                                            });
+                                                                            if (response.success) {
+                                                                                setAppointment(prev => ({
+                                                                                    ...prev,
+                                                                                    doctor_diagnosis: {
+                                                                                        ...prev.doctor_diagnosis,
+                                                                                        files: updatedFiles
+                                                                                    }
+                                                                                }));
+                                                                            }
+                                                                        } catch (err) {
+                                                                            alert("Failed to remove file.");
+                                                                        }
+                                                                    }
+                                                                }}
+                                                                className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded transition-colors font-bold"
+                                                                title="Remove File"
+                                                            >
+                                                                ×
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                            <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
+                                <button 
+                                    onClick={() => {
+                                        setDoctorDiagnosisText(appointment.doctor_diagnosis.text);
+                                        alert("You can now update your clinical notes below. Re-upload files if you wish to add more.");
+                                    }}
+                                    className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center"
+                                >
+                                    <Sparkles className="w-4 h-4 mr-2" />
+                                    Update Diagnosis
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Diagnosis Form */}
+                    <div className="space-y-8">
+                        {/* Diagnosis Text Input */}
+                        <div>
+                            <label htmlFor="doctor-diagnosis-text" className="block text-lg font-bold text-gray-800 mb-3">
+                                {appointment.doctor_diagnosis ? "Update Clinical Notes" : "Clinical Notes"}
+                            </label>
+                            <textarea
+                                id="doctor-diagnosis-text"
+                                value={doctorDiagnosisText}
+                                onChange={(e) => setDoctorDiagnosisText(e.target.value)}
+                                placeholder="Enter your clinical diagnosis, observations, treatment plan, and any additional notes..."
+                                className="w-full px-5 py-4 text-base border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-y min-h-[200px] leading-relaxed"
+                                rows={8}
+                                style={{ fontSize: '16px', lineHeight: '1.6' }}
+                            />
+                            <p className="text-sm text-gray-600 mt-2">
+                                Include your clinical assessment, differential diagnosis, treatment recommendations, and follow-up plans.
+                            </p>
+                        </div>
+
+                        {/* Diagnosis File Upload */}
+                        <div>
+                            <label className="block text-lg font-bold text-gray-800 mb-3">
+                                {appointment.doctor_diagnosis ? "Add More Supporting Documents" : "Supporting Documents"}
+                            </label>
+                            <p className="text-base text-gray-700 mb-4">
+                                Upload clinical notes, images, or other supporting documents for your diagnosis
+                            </p>
+                            <input
+                                type="file"
+                                id="doctor-diagnosis-files"
+                                multiple
+                                accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.dicom"
+                                onChange={handleDoctorDiagnosisFileUpload}
+                                className="hidden"
+                                disabled={uploadingDoctorDiagnosis || savingDoctorDiagnosis}
+                            />
+                            <label
+                                htmlFor="doctor-diagnosis-files"
+                                className={`btn-secondary w-full flex items-center justify-center cursor-pointer py-3 text-base font-semibold ${uploadingDoctorDiagnosis || savingDoctorDiagnosis ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                                {uploadingDoctorDiagnosis ? (
+                                    <>
+                                        <Loader className="w-5 h-5 mr-3 animate-spin" />
+                                        Uploading...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Upload className="w-5 h-5 mr-3" />
+                                        {appointment.doctor_diagnosis ? "Upload Additional Documents" : "Upload Supporting Documents"}
+                                    </>
+                                )}
+                            </label>
+
+                            {/* Display selected files */}
+                            {doctorDiagnosisFiles.length > 0 && (
+                                <div className="mt-5">
+                                    <h4 className="text-base font-bold text-gray-800 mb-3">Selected for Upload:</h4>
+                                    <div className="space-y-3">
+                                        {doctorDiagnosisFiles.map((file, idx) => (
+                                            <div key={file.id || idx} className="flex items-center justify-between bg-white border-2 border-gray-200 rounded-lg p-4 hover:border-green-300 transition-colors">
+                                                <div className="flex items-center space-x-3 overflow-hidden flex-1">
+                                                    <FileText className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                                                    <span className="text-base text-gray-800 truncate font-medium" title={file.name}>
+                                                        {file.name}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center space-x-3 ml-4">
+                                                    <button
+                                                        onClick={() => handleRemoveDoctorDiagnosisFile(file.id)}
+                                                        className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded transition-colors text-xl font-bold"
+                                                        title="Remove File"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Save Button */}
+                        <div className="flex justify-center space-x-4 pt-6 border-t-2 border-green-200">
+                            <button
+                                onClick={() => {
+                                    setDoctorDiagnosisText('');
+                                    setDoctorDiagnosisFiles([]);
+                                }}
+                                className="btn-secondary px-8 py-4 text-base font-semibold rounded-xl"
+                                disabled={savingDoctorDiagnosis}
+                            >
+                                Clear Form
+                            </button>
+                            <button
+                                onClick={handleSaveDoctorDiagnosis}
+                                disabled={savingDoctorDiagnosis || (!doctorDiagnosisText.trim() && doctorDiagnosisFiles.length === 0)}
+                                className={`px-12 py-4 rounded-xl font-bold transition-all flex items-center text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 ${savingDoctorDiagnosis || (!doctorDiagnosisText.trim() && doctorDiagnosisFiles.length === 0)
+                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    : 'bg-green-600 hover:bg-green-700 text-white active:scale-95'
+                                    }`}
+                            >
+                                {savingDoctorDiagnosis ? (
+                                    <>
+                                        <Loader className="w-6 h-6 mr-3 animate-spin" />
+                                        Saving Diagnosis...
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckCircle className="w-6 h-6 mr-3" />
+                                        {appointment.doctor_diagnosis ? "Update Saved Diagnosis" : "Submit Final Diagnosis"}
+                                    </>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
