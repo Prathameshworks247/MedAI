@@ -73,17 +73,17 @@ const RecordingSection = ({
     return (
         <div className="mb-6">
             {/* Live Transcription Display */}
-            <div className="card mb-4 bg-blue-50 border-2 border-blue-300">
+            <div className="card mb-4 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-300 dark:border-blue-600">
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold text-gray-900 flex items-center">
-                        <Mic className={`w-5 h-5 mr-2 text-blue-600 ${isRecording ? 'animate-pulse' : ''}`} />
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center">
+                        <Mic className={`w-5 h-5 mr-2 text-blue-600 dark:text-blue-400 ${isRecording ? 'animate-pulse' : ''}`} />
                         {isRecording ? 'Discussion Details' : 'Discussion Details'}
                     </h3>
                     <div className="flex items-center space-x-2">
                         {isRecording && (
                             <>
-                                <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                <span className="text-sm text-gray-600">
+                                <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500 dark:bg-green-400' : 'bg-red-500 dark:bg-red-400'}`}></div>
+                                <span className="text-sm text-gray-600 dark:text-gray-300">
                                     {isConnected ? 'Connected' : 'Connecting...'}
                                 </span>
                             </>
@@ -99,7 +99,7 @@ const RecordingSection = ({
                                     a.click();
                                     URL.revokeObjectURL(url);
                                 }}
-                                className="text-primary-600 hover:text-primary-700 text-sm flex items-center"
+                                className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 text-sm flex items-center"
                             >
                                 <Download className="w-4 h-4 mr-1" />
                                 Export
@@ -108,32 +108,32 @@ const RecordingSection = ({
                     </div>
                 </div>
 
-                <div className="bg-white border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 max-h-96 overflow-y-auto">
                     <div className="space-y-2">
                         {transcription && (
-                            <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                            <p className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
                                 {transcription}
                             </p>
                         )}
                         {partialTranscript && (
-                            <p className="text-sm text-gray-500 italic whitespace-pre-wrap leading-relaxed">
+                            <p className="text-sm text-gray-500 dark:text-gray-400 italic whitespace-pre-wrap leading-relaxed">
                                 {partialTranscript}
                                 {isRecording && (
-                                    <span className="inline-block w-2 h-4 bg-blue-500 ml-1 animate-pulse"></span>
+                                    <span className="inline-block w-2 h-4 bg-blue-500 dark:bg-blue-400 ml-1 animate-pulse"></span>
                                 )}
                             </p>
                         )}
                         {!transcription && !partialTranscript && isRecording && (
-                            <p className="text-sm text-gray-400 italic">Waiting for audio transcription...</p>
+                            <p className="text-sm text-gray-400 dark:text-gray-500 italic">Waiting for audio transcription...</p>
                         )}
                         {!transcription && !partialTranscript && !isRecording && (
-                            <p className="text-sm text-gray-400 italic text-center py-4">No transcription available. Start recording to generate one.</p>
+                            <p className="text-sm text-gray-400 dark:text-gray-500 italic text-center py-4">No transcription available. Start recording to generate one.</p>
                         )}
                     </div>
                 </div>
 
                 {isRecording && (
-                    <div className="mt-3 flex items-center justify-between text-sm text-gray-600">
+                    <div className="mt-3 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
                         <span>Duration: {formatDuration(recordingDuration)}</span>
                         <span>Status: Recording</span>
                     </div>
@@ -142,46 +142,49 @@ const RecordingSection = ({
 
             {/* Recording Controls */}
             {!isFinalized && (
-                <div className="mt-4">
+                <div className="mt-4 flex justify-end">
                     {!isRecording && transcription.length === 0 ? (
                         <button
                             onClick={onStart}
-                            className="btn-primary flex items-center justify-center w-full"
+                            className="inline-flex items-center justify-center px-6 py-2.5 bg-primary-600 hover:bg-primary-700 dark:bg-primary-700 dark:hover:bg-primary-600 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
                         >
                             <Mic className="w-4 h-4 mr-2" />
-                            Start Recording
+                            <span className="text-sm">Start Recording</span>
                         </button>
                     ) : isRecording ? (
                         <button
                             onClick={onStop}
-                            className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center w-full"
+                            className="inline-flex items-center justify-center px-6 py-2.5 bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
                         >
                             <Square className="w-4 h-4 mr-2" />
-                            Stop Recording ({formatDuration(recordingDuration)})
+                            <span className="text-sm">Stop ({formatDuration(recordingDuration)})</span>
                         </button>
                     ) : (
-                        <div className="flex space-x-2">
+                        <div className="flex items-center gap-3">
                             <button
                                 onClick={onRedo}
-                                className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center flex-1"
+                                className="inline-flex items-center justify-center px-5 py-2.5 bg-yellow-100 dark:bg-yellow-900/30 hover:bg-yellow-200 dark:hover:bg-yellow-900/50 text-yellow-800 dark:text-yellow-200 font-semibold rounded-lg transition-all duration-200 border border-yellow-300 dark:border-yellow-700 shadow-sm hover:shadow-md"
                             >
-                                <span className="mr-2">↺</span>
-                                Redo Recording
+                                <span className="mr-2 text-base">↺</span>
+                                <span className="text-sm">Redo</span>
                             </button>
                             <button
                                 onClick={onFinalize}
                                 disabled={isFinalizing}
-                                className={`bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center flex-1 ${isFinalizing ? 'opacity-75 cursor-not-allowed' : ''}`}
+                                className={`inline-flex items-center justify-center px-6 py-2.5 rounded-lg font-semibold transition-all duration-200 shadow-md hover:shadow-lg ${isFinalizing 
+                                    ? 'bg-gray-400 dark:bg-gray-600 text-white opacity-75 cursor-not-allowed' 
+                                    : 'bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white'
+                                }`}
                             >
                                 {isFinalizing ? (
                                     <>
                                         <Loader className="w-4 h-4 mr-2 animate-spin" />
-                                        Finalizing...
+                                        <span className="text-sm">Finalizing...</span>
                                     </>
                                 ) : (
                                     <>
                                         <CheckCircle className="w-4 h-4 mr-2" />
-                                        Finalize Recording
+                                        <span className="text-sm">Finalize</span>
                                     </>
                                 )}
                             </button>
@@ -195,13 +198,14 @@ const RecordingSection = ({
 
 const UploadSection = ({ title, icon: Icon, colorClass, borderClass, accept, onUpload, uploading, uploadedFiles }) => {
     const id = `upload-${title.toLowerCase().replace(/\s+/g, '-')}`;
+    const iconColorClass = borderClass.replace('border-', 'text-').replace('300', '600');
     return (
-        <div className={`card ${colorClass} border-2 ${borderClass}`}>
-            <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center">
-                <Icon className={`w-5 h-5 mr-2 ${borderClass.replace('border-', 'text-').replace('300', '600')}`} />
+        <div className={`card ${colorClass} dark:bg-gray-800 border-2 ${borderClass} dark:border-gray-600`}>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 flex items-center">
+                <Icon className={`w-5 h-5 mr-2 ${iconColorClass} dark:text-${iconColorClass.split('-')[1]}-400`} />
                 {title}
             </h3>
-            <p className="text-xs text-gray-600 mb-3">
+            <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
                 Upload {title.toLowerCase()} files.
             </p>
             <input
@@ -222,13 +226,13 @@ const UploadSection = ({ title, icon: Icon, colorClass, borderClass, accept, onU
             </label>
             {uploadedFiles && uploadedFiles.length > 0 && (
                 <div className="mt-4">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Uploaded Files:</h4>
+                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Uploaded Files:</h4>
                     <div className="space-y-2">
                         {uploadedFiles.map((file, idx) => (
-                            <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-2">
+                            <div key={idx} className="flex items-center justify-between bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-2">
                                 <div className="flex items-center space-x-2 overflow-hidden">
-                                    <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                                    <span className="text-sm text-gray-700 truncate" title={file.file_name || file.name || file.doc_name}>
+                                    <FileText className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+                                    <span className="text-sm text-gray-700 dark:text-gray-200 truncate" title={file.file_name || file.name || file.doc_name}>
                                         {file.file_name || file.name || file.doc_name}
                                     </span>
                                 </div>
@@ -237,13 +241,13 @@ const UploadSection = ({ title, icon: Icon, colorClass, borderClass, accept, onU
                                         href={file.uri}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded"
+                                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 p-1 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
                                         title="View Document"
                                     >
                                         <Eye className="w-4 h-4" />
                                     </a>
                                 ) : (
-                                    <CheckCircle className="w-4 h-4 text-green-600 mr-1" />
+                                    <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 mr-1" />
                                 )}
                             </div>
                         ))}
@@ -1157,16 +1161,16 @@ const ActiveSession = () => {
 
     if (loading) {
         return (
-            <div className="flex justify-center items-center h-screen">
-                <Loader className="w-8 h-8 animate-spin text-blue-500" />
+            <div className="flex justify-center items-center h-screen bg-gray-50 dark:bg-gray-900">
+                <Loader className="w-8 h-8 animate-spin text-blue-500 dark:text-blue-400" />
             </div>
         );
     }
 
     if (error || !appointment) {
         return (
-            <div className="p-6 text-center">
-                <div className="text-red-500 mb-4">{error || 'Appointment not found'}</div>
+            <div className="p-6 text-center bg-gray-50 dark:bg-gray-900 min-h-screen">
+                <div className="text-red-500 dark:text-red-400 mb-4">{error || 'Appointment not found'}</div>
                 <button onClick={() => navigate('/doctor')} className="btn-secondary">Back to Dashboard</button>
             </div>
         );
@@ -1174,13 +1178,13 @@ const ActiveSession = () => {
 
     const getStatusBadge = (status) => {
         const badges = {
-            'scheduled': 'bg-blue-100 text-blue-700',
-            'in_progress': 'bg-green-100 text-green-700',
-            'paused': 'bg-yellow-100 text-yellow-700',
-            'completed': 'bg-gray-100 text-gray-700',
-            'cancelled': 'bg-red-100 text-red-700'
+            'scheduled': 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+            'in_progress': 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
+            'paused': 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300',
+            'completed': 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
+            'cancelled': 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
         };
-        return badges[status] || 'bg-gray-100 text-gray-700';
+        return badges[status] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300';
     };
 
     return (
@@ -1189,7 +1193,7 @@ const ActiveSession = () => {
             <div className="mb-6">
                 <button
                     onClick={() => navigate('/doctor')}
-                    className="flex items-center text-gray-600 hover:text-gray-900 mb-4"
+                    className="flex items-center text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 mb-4 transition-colors"
                 >
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Back to Dashboard
@@ -1198,8 +1202,8 @@ const ActiveSession = () => {
                 {/* Previous Visits */}
                 {appointment.previousAppointments && appointment.previousAppointments.length > 0 && (
                     <div className="mb-6">
-                        <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
-                            <Clock className="w-5 h-5 mr-2 text-gray-600" />
+                        <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
+                            <Clock className="w-5 h-5 mr-2 text-gray-600 dark:text-gray-400" />
                             Previous Visits
                         </h3>
                         <div className="space-y-4">
@@ -1215,28 +1219,28 @@ const ActiveSession = () => {
                     </div>
                 )}
 
-                <div className="card bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-300">
+                <div className="card bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 border-2 border-green-300 dark:border-green-600">
                     <div className="flex items-start justify-between">
                         <div>
                             <div className="flex items-center space-x-3 mb-2">
-                                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                                <h2 className="text-2xl font-bold text-gray-900">ACTIVE SESSION</h2>
+                                <div className="w-3 h-3 bg-green-500 dark:bg-green-400 rounded-full animate-pulse"></div>
+                                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">ACTIVE SESSION</h2>
                             </div>
-                            <h3 className="text-xl font-semibold text-gray-800 mb-1">{appointment.patient.name}</h3>
-                            <p className="text-sm text-gray-600 font-semibold mb-1 capitalize">Chief Complaint: {appointment.chief_complaint}</p>
-                            <p className="text-sm text-gray-600">{appointment.patient.age} years • {appointment.patient.gender} • {appointment.scheduledTime}</p>
+                            <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-1">{appointment.patient.name}</h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-300 font-semibold mb-1 capitalize">Chief Complaint: {appointment.chief_complaint}</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-300">{appointment.patient.age} years • {appointment.patient.gender} • {appointment.scheduledTime}</p>
 
                             {appointment.type === 'followup' && (
-                                <div className="mt-3 p-3 bg-purple-100 border border-purple-200 rounded-lg">
-                                    <p className="text-sm font-semibold text-purple-900">
+                                <div className="mt-3 p-3 bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg">
+                                    <p className="text-sm font-semibold text-purple-900 dark:text-purple-200">
                                         🔄 Follow Up Visit #{appointment.appointmentNumber}
                                     </p>
                                 </div>
                             )}
 
                             {appointment.type === 'baseline' && (
-                                <div className="mt-3 p-3 bg-blue-100 border border-blue-200 rounded-lg">
-                                    <p className="text-sm font-semibold text-blue-900">
+                                <div className="mt-3 p-3 bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg">
+                                    <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
                                         🆕 Baseline Visit
                                     </p>
                                 </div>
@@ -1244,12 +1248,12 @@ const ActiveSession = () => {
                         </div>
 
                         <div className="text-right">
-                            <div className="flex items-center space-x-2 text-gray-700 mb-2">
+                            <div className="flex items-center space-x-2 text-gray-700 dark:text-gray-300 mb-2">
                                 <Clock className="w-4 h-4" />
                                 <span className="text-sm">Started: {session?.startedAt}</span>
                             </div>
-                            <div className="text-2xl font-bold text-green-600">{session?.totalDuration}</div>
-                            <p className="text-xs text-gray-600">Session Duration</p>
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{session?.totalDuration}</div>
+                            <p className="text-xs text-gray-600 dark:text-gray-400">Session Duration</p>
                         </div>
                     </div>
                 </div>
@@ -1300,18 +1304,18 @@ const ActiveSession = () => {
 
             {/* Generate Diagnosis Button - Show before diagnosis is generated */}
             {!appointment.diagnosis_generated_at && (
-                <div className="mt-6 card bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-300">
+                <div className="mt-6 card bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 border-2 border-indigo-300 dark:border-indigo-600">
                     <div className="flex items-center justify-between">
                         <div className="flex-1">
-                            <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center">
-                                <Brain className="w-5 h-5 mr-2 text-indigo-600" />
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 flex items-center">
+                                <Brain className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" />
                                 AI Diagnostic Analysis
                             </h3>
-                            <p className="text-sm text-gray-600">
+                            <p className="text-sm text-gray-600 dark:text-gray-300">
                                 Generate comprehensive AI-powered diagnostic insights based on the consultation recording and uploaded documents.
                             </p>
                             {!transcriptRecorded && !documentsUploaded && (
-                                <p className="text-sm text-orange-600 mt-2 font-semibold">
+                                <p className="text-sm text-orange-600 dark:text-orange-400 mt-2 font-semibold">
                                     ⚠ Complete recording or upload documents to enable diagnosis generation
                                 </p>
                             )}
@@ -1320,8 +1324,8 @@ const ActiveSession = () => {
                             onClick={handleGenerateDiagnosis}
                             disabled={!transcriptRecorded && !documentsUploaded || generatingDiagnosis}
                             className={`ml-4 px-6 py-3 rounded-lg font-semibold transition-all flex items-center ${(transcriptRecorded || documentsUploaded) && !generatingDiagnosis
-                                ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg hover:shadow-xl'
-                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                ? 'bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 text-white shadow-lg hover:shadow-xl'
+                                : 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
                                 }`}
                         >
                             {generatingDiagnosis ? (
@@ -1345,13 +1349,13 @@ const ActiveSession = () => {
 
             {/* Diagnostic Insights - Show if generated */}
             {appointment.diagnosis_generated_at && (
-                <div className="card mt-8 border-2 border-indigo-100 bg-white">
-                    <div className="mb-4 border-b border-gray-100 pb-4">
-                        <h3 className="text-lg font-bold text-gray-900 flex items-center">
-                            <Sparkles className="w-5 h-5 mr-2 text-indigo-600" />
+                <div className="card mt-8 border-2 border-indigo-100 dark:border-indigo-600 bg-white dark:bg-gray-800">
+                    <div className="mb-4 border-b border-gray-100 dark:border-gray-700 pb-4">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center">
+                            <Sparkles className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" />
                             AI Diagnostic Analysis
                         </h3>
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                             Comprehensive analysis generated on {new Date(appointment.diagnosis_generated_at).toLocaleString()}
                         </p>
                     </div>
@@ -1364,19 +1368,19 @@ const ActiveSession = () => {
 
             {/* Doctor's Diagnosis Section - Show after AI diagnosis is generated */}
             {appointment.diagnosis_generated_at && (
-                <div className="card mt-6 border-2 border-green-200 bg-green-50">
-                    <div className="mb-6 border-b border-green-200 pb-5 flex items-center justify-between">
+                <div className="card mt-6 border-2 border-green-200 dark:border-green-600 bg-green-50 dark:bg-green-900/20">
+                    <div className="mb-6 border-b border-green-200 dark:border-green-700 pb-5 flex items-center justify-between">
                         <div>
-                            <h3 className="text-2xl font-bold text-gray-900 flex items-center mb-2">
-                                <Stethoscope className="w-6 h-6 mr-3 text-green-600" />
+                            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center mb-2">
+                                <Stethoscope className="w-6 h-6 mr-3 text-green-600 dark:text-green-400" />
                                 Doctor's Diagnosis
                             </h3>
-                            <p className="text-base text-gray-700 mt-2">
+                            <p className="text-base text-gray-700 dark:text-gray-300 mt-2">
                                 Provide your clinical diagnosis, notes, and supporting documents
                             </p>
                         </div>
                         {appointment.doctor_diagnosis?.submitted_at && (
-                            <div className="bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-bold flex items-center border border-green-200">
+                            <div className="bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 px-4 py-2 rounded-full text-sm font-bold flex items-center border border-green-200 dark:border-green-700">
                                 <CheckCircle className="w-4 h-4 mr-2" />
                                 Saved on {new Date(appointment.doctor_diagnosis.submitted_at).toLocaleString()}
                             </div>
@@ -1385,21 +1389,21 @@ const ActiveSession = () => {
 
                     {/* Display Saved Diagnosis if it exists */}
                     {appointment.doctor_diagnosis && (
-                        <div className="mb-8 bg-white p-6 rounded-lg border border-green-200 shadow-sm">
-                            <h4 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Saved Clinical Notes:</h4>
-                            <div className="text-gray-800 whitespace-pre-wrap leading-relaxed mb-6" style={{ fontSize: '16px' }}>
+                        <div className="mb-8 bg-white dark:bg-gray-800 p-6 rounded-lg border border-green-200 dark:border-green-700 shadow-sm">
+                            <h4 className="text-lg font-bold text-gray-800 dark:text-gray-200 mb-4 border-b dark:border-gray-700 pb-2">Saved Clinical Notes:</h4>
+                            <div className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed mb-6" style={{ fontSize: '16px' }}>
                                 {appointment.doctor_diagnosis.text || "No clinical notes provided."}
                             </div>
 
                             {appointment.doctor_diagnosis.files && appointment.doctor_diagnosis.files.length > 0 && (
                                 <div>
-                                    <h4 className="text-base font-bold text-gray-800 mb-3">Saved Supporting Documents:</h4>
+                                    <h4 className="text-base font-bold text-gray-800 dark:text-gray-200 mb-3">Saved Supporting Documents:</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                         {appointment.doctor_diagnosis.files.map((file, idx) => (
-                                            <div key={idx} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-3 hover:bg-gray-100 transition-colors">
+                                            <div key={idx} className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-3 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
                                                 <div className="flex items-center space-x-3 overflow-hidden">
-                                                    <FileText className="w-5 h-5 text-indigo-500 flex-shrink-0" />
-                                                    <span className="text-sm text-gray-800 truncate font-medium" title={file.name}>
+                                                    <FileText className="w-5 h-5 text-indigo-500 dark:text-indigo-400 flex-shrink-0" />
+                                                    <span className="text-sm text-gray-800 dark:text-gray-200 truncate font-medium" title={file.name}>
                                                         {file.name}
                                                     </span>
                                                 </div>
@@ -1408,7 +1412,7 @@ const ActiveSession = () => {
                                                         href={file.uri}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        className="text-indigo-600 hover:text-indigo-800 p-2 hover:bg-indigo-50 rounded transition-colors"
+                                                        className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 p-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded transition-colors"
                                                         title="View Document"
                                                     >
                                                         <Eye className="w-5 h-5" />
@@ -1439,7 +1443,7 @@ const ActiveSession = () => {
                                                                 }
                                                             }
                                                         }}
-                                                        className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded transition-colors font-bold"
+                                                        className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 p-2 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors font-bold"
                                                         title="Remove File"
                                                     >
                                                         ×
@@ -1451,13 +1455,13 @@ const ActiveSession = () => {
                                 </div>
                             )}
 
-                            <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
+                            <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700 flex justify-end">
                                 <button
                                     onClick={() => {
                                         setDoctorDiagnosisText(appointment.doctor_diagnosis.text);
                                         alert("You can now update your clinical notes below. Re-upload files if you wish to add more.");
                                     }}
-                                    className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center"
+                                    className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-bold flex items-center"
                                 >
                                     <Sparkles className="w-4 h-4 mr-2" />
                                     Update Diagnosis
@@ -1470,7 +1474,7 @@ const ActiveSession = () => {
                     <div className="space-y-8">
                         {/* Diagnosis Text Input */}
                         <div>
-                            <label htmlFor="doctor-diagnosis-text" className="block text-lg font-bold text-gray-800 mb-3">
+                            <label htmlFor="doctor-diagnosis-text" className="block text-lg font-bold text-gray-800 dark:text-gray-200 mb-3">
                                 {appointment.doctor_diagnosis ? "Update Clinical Notes" : "Clinical Notes"}
                             </label>
                             <textarea
@@ -1478,21 +1482,21 @@ const ActiveSession = () => {
                                 value={doctorDiagnosisText}
                                 onChange={(e) => setDoctorDiagnosisText(e.target.value)}
                                 placeholder="Enter your clinical diagnosis, observations, treatment plan, and any additional notes..."
-                                className="w-full px-5 py-4 text-base border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-y min-h-[200px] leading-relaxed"
+                                className="w-full px-5 py-4 text-base border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-400 focus:border-green-500 dark:focus:border-green-400 resize-y min-h-[200px] leading-relaxed bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500"
                                 rows={8}
                                 style={{ fontSize: '16px', lineHeight: '1.6' }}
                             />
-                            <p className="text-sm text-gray-600 mt-2">
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
                                 Include your clinical assessment, differential diagnosis, treatment recommendations, and follow-up plans.
                             </p>
                         </div>
 
                         {/* Diagnosis File Upload */}
                         <div>
-                            <label className="block text-lg font-bold text-gray-800 mb-3">
+                            <label className="block text-lg font-bold text-gray-800 dark:text-gray-200 mb-3">
                                 {appointment.doctor_diagnosis ? "Add More Supporting Documents" : "Supporting Documents"}
                             </label>
-                            <p className="text-base text-gray-700 mb-4">
+                            <p className="text-base text-gray-700 dark:text-gray-300 mb-4">
                                 Upload clinical notes, images, or other supporting documents for your diagnosis
                             </p>
                             <input
@@ -1506,17 +1510,17 @@ const ActiveSession = () => {
                             />
                             <label
                                 htmlFor="doctor-diagnosis-files"
-                                className={`btn-secondary w-full flex items-center justify-center cursor-pointer py-3 text-base font-semibold ${uploadingDoctorDiagnosis || savingDoctorDiagnosis ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className={`inline-flex items-center justify-center px-6 py-2.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold rounded-lg transition-all duration-200 cursor-pointer border border-gray-300 dark:border-gray-600 shadow-sm hover:shadow-md ${uploadingDoctorDiagnosis || savingDoctorDiagnosis ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
                                 {uploadingDoctorDiagnosis ? (
                                     <>
-                                        <Loader className="w-5 h-5 mr-3 animate-spin" />
-                                        Uploading...
+                                        <Loader className="w-4 h-4 mr-2 animate-spin" />
+                                        <span className="text-sm">Uploading...</span>
                                     </>
                                 ) : (
                                     <>
-                                        <Upload className="w-5 h-5 mr-3" />
-                                        {appointment.doctor_diagnosis ? "Upload Additional Documents" : "Upload Supporting Documents"}
+                                        <Upload className="w-4 h-4 mr-2" />
+                                        <span className="text-sm">{appointment.doctor_diagnosis ? "Add Documents" : "Upload Documents"}</span>
                                     </>
                                 )}
                             </label>
@@ -1524,20 +1528,20 @@ const ActiveSession = () => {
                             {/* Display selected files */}
                             {doctorDiagnosisFiles.length > 0 && (
                                 <div className="mt-5">
-                                    <h4 className="text-base font-bold text-gray-800 mb-3">Selected for Upload:</h4>
+                                    <h4 className="text-base font-bold text-gray-800 dark:text-gray-200 mb-3">Selected for Upload:</h4>
                                     <div className="space-y-3">
                                         {doctorDiagnosisFiles.map((file, idx) => (
-                                            <div key={file.id || idx} className="flex items-center justify-between bg-white border-2 border-gray-200 rounded-lg p-4 hover:border-green-300 transition-colors">
+                                            <div key={file.id || idx} className="flex items-center justify-between bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:border-green-300 dark:hover:border-green-600 transition-colors">
                                                 <div className="flex items-center space-x-3 overflow-hidden flex-1">
-                                                    <FileText className="w-5 h-5 text-gray-500 flex-shrink-0" />
-                                                    <span className="text-base text-gray-800 truncate font-medium" title={file.name}>
+                                                    <FileText className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                                                    <span className="text-base text-gray-800 dark:text-gray-200 truncate font-medium" title={file.name}>
                                                         {file.name}
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center space-x-3 ml-4">
                                                     <button
                                                         onClick={() => handleRemoveDoctorDiagnosisFile(file.id)}
-                                                        className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded transition-colors text-xl font-bold"
+                                                        className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 p-2 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors text-xl font-bold"
                                                         title="Remove File"
                                                     >
                                                         ×
@@ -1551,34 +1555,34 @@ const ActiveSession = () => {
                         </div>
 
                         {/* Save Button */}
-                        <div className="flex justify-center space-x-4 pt-6 border-t-2 border-green-200">
+                        <div className="flex justify-end items-center gap-3 pt-6 border-t-2 border-green-200 dark:border-green-700">
                             <button
                                 onClick={() => {
                                     setDoctorDiagnosisText('');
                                     setDoctorDiagnosisFiles([]);
                                 }}
-                                className="btn-secondary px-8 py-4 text-base font-semibold rounded-xl"
+                                className="px-5 py-2.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold rounded-lg transition-all duration-200 border border-gray-300 dark:border-gray-600 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                                 disabled={savingDoctorDiagnosis}
                             >
-                                Clear Form
+                                <span className="text-sm">Clear</span>
                             </button>
                             <button
                                 onClick={handleSaveDoctorDiagnosis}
                                 disabled={savingDoctorDiagnosis || (!doctorDiagnosisText.trim() && doctorDiagnosisFiles.length === 0)}
-                                className={`px-12 py-4 rounded-xl font-bold transition-all flex items-center text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 ${savingDoctorDiagnosis || (!doctorDiagnosisText.trim() && doctorDiagnosisFiles.length === 0)
-                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                    : 'bg-green-600 hover:bg-green-700 text-white active:scale-95'
+                                className={`px-6 py-2.5 rounded-lg font-semibold transition-all flex items-center text-sm shadow-md hover:shadow-lg ${savingDoctorDiagnosis || (!doctorDiagnosisText.trim() && doctorDiagnosisFiles.length === 0)
+                                    ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                                    : 'bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white active:scale-95'
                                     }`}
                             >
                                 {savingDoctorDiagnosis ? (
                                     <>
-                                        <Loader className="w-6 h-6 mr-3 animate-spin" />
-                                        Saving Diagnosis...
+                                        <Loader className="w-4 h-4 mr-2 animate-spin" />
+                                        <span>Saving...</span>
                                     </>
                                 ) : (
                                     <>
-                                        <CheckCircle className="w-6 h-6 mr-3" />
-                                        {appointment.doctor_diagnosis ? "Update Saved Diagnosis" : "Submit Final Diagnosis"}
+                                        <CheckCircle className="w-4 h-4 mr-2" />
+                                        <span>{appointment.doctor_diagnosis ? "Update" : "Submit"}</span>
                                     </>
                                 )}
                             </button>
@@ -1590,50 +1594,50 @@ const ActiveSession = () => {
 
             {/* Additional Actions - Only show after required activities */}
             {requiredComplete && (
-                <div className="card bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200">
-                    <h3 className="text-lg font-bold text-gray-900 mb-4">Additional Actions</h3>
-                    <p className="text-sm text-gray-600 mb-4">
+                <div className="card bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border-2 border-blue-200 dark:border-blue-600">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Additional Actions</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
                         All required activities completed. You can now upload additional documents or generate diagnosis at any time.
                     </p>
 
                     <div className="grid grid-cols-2 gap-4">
-                        <button className="card hover:shadow-lg transition-all border-2 border-orange-200 bg-orange-50 text-left p-4">
+                        <button className="card hover:shadow-lg transition-all border-2 border-orange-200 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20 text-left p-4">
                             <div className="flex items-start space-x-3">
-                                <TestTube2 className="w-6 h-6 text-orange-600 flex-shrink-0" />
+                                <TestTube2 className="w-6 h-6 text-orange-600 dark:text-orange-400 flex-shrink-0" />
                                 <div>
-                                    <h4 className="font-semibold text-gray-900 mb-1">Upload Test Results</h4>
-                                    <p className="text-xs text-gray-600">Blood work, ECG, X-rays, etc.</p>
+                                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">Upload Test Results</h4>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400">Blood work, ECG, X-rays, etc.</p>
                                 </div>
                             </div>
                         </button>
 
-                        <button className="card hover:shadow-lg transition-all border-2 border-red-200 bg-red-50 text-left p-4">
+                        <button className="card hover:shadow-lg transition-all border-2 border-red-200 dark:border-red-700 bg-red-50 dark:bg-red-900/20 text-left p-4">
                             <div className="flex items-start space-x-3">
-                                <Brain className="w-6 h-6 text-red-600 flex-shrink-0" />
+                                <Brain className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0" />
                                 <div>
-                                    <h4 className="font-semibold text-gray-900 mb-1">Generate Diagnosis</h4>
-                                    <p className="text-xs text-gray-600">AI-powered insights & recommendations</p>
+                                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">Generate Diagnosis</h4>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400">AI-powered insights & recommendations</p>
                                 </div>
                             </div>
                         </button>
 
 
-                        <button className="card hover:shadow-lg transition-all border-2 border-gray-200 bg-gray-50 text-left p-4">
+                        <button className="card hover:shadow-lg transition-all border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-left p-4">
                             <div className="flex items-start space-x-3">
-                                <Plus className="w-6 h-6 text-gray-600 flex-shrink-0" />
+                                <Plus className="w-6 h-6 text-gray-600 dark:text-gray-400 flex-shrink-0" />
                                 <div>
-                                    <h4 className="font-semibold text-gray-900 mb-1">Add Documents</h4>
-                                    <p className="text-xs text-gray-600">Any additional files or notes</p>
+                                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">Add Documents</h4>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400">Any additional files or notes</p>
                                 </div>
                             </div>
                         </button>
 
-                        <button className="card hover:shadow-lg transition-all border-2 border-green-200 bg-green-50 text-left p-4">
+                        <button className="card hover:shadow-lg transition-all border-2 border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20 text-left p-4">
                             <div className="flex items-start space-x-3">
-                                <Download className="w-6 h-6 text-green-600 flex-shrink-0" />
+                                <Download className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0" />
                                 <div>
-                                    <h4 className="font-semibold text-gray-900 mb-1">Export All</h4>
-                                    <p className="text-xs text-gray-600">Download complete session record</p>
+                                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">Export All</h4>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400">Download complete session record</p>
                                 </div>
                             </div>
                         </button>
@@ -1642,11 +1646,11 @@ const ActiveSession = () => {
             )}
 
             {/* Session Controls */}
-            <div className="card mt-6 bg-gray-50">
+            <div className="card mt-6 bg-gray-50 dark:bg-gray-800">
                 <div className="flex items-center justify-between">
                     <div>
-                        <p className="text-sm text-gray-600">Session Status</p>
-                        <p className="text-lg font-semibold text-gray-900 capitalize">{appointment.status.split('_').join(' ')}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Session Status</p>
+                        <p className="text-lg font-semibold text-gray-900 dark:text-gray-100 capitalize">{appointment.status.split('_').join(' ')}</p>
                     </div>
                     <div className="flex space-x-3">
                         <button
@@ -1657,7 +1661,7 @@ const ActiveSession = () => {
                         </button>
                         <button
                             onClick={handleEndSession}
-                            className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors flex items-center"
+                            className="bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white font-semibold py-2 px-6 rounded-lg transition-colors flex items-center"
                         >
                             <CheckCircle className="w-4 h-4 mr-2" />
                             End Session

@@ -58,8 +58,8 @@ const DoctorPortal = () => {
 
             <div className="flex">
                 {/* Sidebar Navigation */}
-                <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 min-h-[calc(100vh-73px)] sticky top-[73px] shadow-lg transition-colors duration-200">
-                    <nav className="p-4 space-y-2">
+                <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 h-[calc(100vh-73px)] sticky top-[73px] shadow-lg transition-colors duration-200 overflow-hidden flex flex-col">
+                    <nav className="p-4 space-y-2 flex-shrink-0">
                         {navItems.map((item) => (
                             <Link
                                 key={item.path}
@@ -76,7 +76,7 @@ const DoctorPortal = () => {
                     </nav>
 
                     {/* Sidebar Footer */}
-                    <div className="absolute bottom-4 left-4 right-4 p-4 bg-gradient-to-br from-primary-50 to-blue-50 dark:from-gray-700 dark:to-gray-600 rounded-xl border border-primary-100 dark:border-gray-600">
+                    <div className="mt-auto p-4 mx-4 mb-4 bg-gradient-to-br from-primary-50 to-blue-50 dark:from-gray-700 dark:to-gray-600 rounded-xl border border-primary-100 dark:border-gray-600 flex-shrink-0">
                         <p className="text-xs text-gray-600 dark:text-gray-300 font-medium">MediPortal v1.0</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Healthcare Management</p>
                     </div>
