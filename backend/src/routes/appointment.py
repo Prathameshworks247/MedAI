@@ -1,7 +1,8 @@
 from fastapi import APIRouter, UploadFile, File, WebSocket, WebSocketDisconnect, Query, HTTPException, status, Depends
+import io
 from bson import ObjectId
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Optional, List
 
 from src.models.appointment import AppointmentModel, UpdateAppointmentModel, DiagnosisResponse, PrimaryDiagnosis, DiagnosisItem
 from src.middlewares.auth import check_doctor_exists
@@ -12,6 +13,7 @@ from src.services.whisper_service import transcribe_audio_file
 from src.services.tools import extract_clinical_info, _save_to_mongo_impl
 from src.services.diagnosis_generator import generate_diagnosis, build_diagnosis_context, convert_med42_to_structured_json
 from src.services.chatbot_context import verify_doctor_patient_access
+from src.r2 import upload_to_r2
 
 router = APIRouter()
 
@@ -691,4 +693,76 @@ async def generate_appointment_diagnosis(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate diagnosis: {str(e)}"
+        )
+
+@router.post("/{appointment_id}/upload-diagnosis-files")
+async def upload_diagnosis_files(
+    appointment_id: str,
+    files: List[UploadFile] = File(...),
+    doctor: dict = Depends(check_doctor_exists)
+):
+    """Upload multiple diagnosis files to R2"""
+    try:
+        uploaded_files = []
+        
+        for file in files:
+            content = await file.read()
+            # Use unique filename to avoid collisions
+            unique_filename = f"diagnosis/{appointment_id}/{datetime.now().timestamp()}_{file.filename}"
+            file_uri = upload_to_r2(io.BytesIO(content), unique_filename)
+            
+            if file_uri:
+                uploaded_files.append({
+                    "name": file.filename,
+                    "uri": file_uri
+                })
+            else:
+                print(f"Failed to upload {file.filename} to R2")
+                
+        return {"success": True, "files": uploaded_files}
+    except Exception as e:
+        print(f"Error uploading diagnosis files: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload files: {str(e)}"
+        )
+
+@router.post("/{appointment_id}/doctor-diagnosis")
+async def save_doctor_diagnosis(
+    appointment_id: str,
+    diagnosis_data: dict,
+    doctor: dict = Depends(check_doctor_exists)
+):
+    """Save doctor's clinical diagnosis and notes"""
+    try:
+        # Expected diagnosis_data: { diagnosis_text: str, files: List[dict] }
+        # where files is List of { name: str, uri: str }
+        
+        result = await appointment_collection.update_one(
+            {"_id": appointment_id},
+            {
+                "$set": {
+                    "doctor_diagnosis": {
+                        "text": diagnosis_data.get("diagnosis_text", ""),
+                        "files": diagnosis_data.get("files", []),
+                        "submitted_at": datetime.now(),
+                        "doctor_id": str(doctor["_id"])
+                    },
+                    "updated_at": datetime.now()
+                }
+            }
+        )
+        
+        if result.matched_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Appointment not found"
+            )
+            
+        return {"success": True, "message": "Doctor diagnosis saved successfully"}
+    except Exception as e:
+        print(f"Error saving doctor diagnosis: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save diagnosis: {str(e)}"
         )
