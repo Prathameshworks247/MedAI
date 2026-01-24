@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, Bot, User, MessageSquare, Plus, ArrowLeft, History, Trash2, Upload, FileText, Loader, Eye } from 'lucide-react';
 import { apiRequest } from '../../utils/api';
 import PDFViewer from './PDFViewer';
-
+import ReactMarkdown from "react-markdown";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, readOnly = false }) => {
@@ -512,42 +512,49 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-            <div className="bg-white rounded-lg shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 dark:bg-opacity-70">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col transition-colors duration-200">
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                    <div className="flex items-center space-x-3">
+                <div className="relative flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 shadow-sm">
+                    <div className="flex items-center space-x-4">
                         {isHistoryOpen ? (
                             <button
                                 onClick={() => setIsHistoryOpen(false)}
-                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
                             >
-                                <ArrowLeft className="w-5 h-5 text-gray-600" />
+                                <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                             </button>
                         ) : (
                             <button
                                 onClick={() => setIsHistoryOpen(true)}
-                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex items-center space-x-2"
+                                className="p-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 flex items-center space-x-2 group"
                                 title="View chat history"
                             >
-                                <History className="w-5 h-5 text-gray-600" />
-                                <span className="text-sm text-gray-600 hidden sm:inline">History</span>
+                                <History className="w-5 h-5 text-gray-600 dark:text-gray-400 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors" />
+                                <span className="text-sm font-medium text-gray-600 dark:text-gray-400 group-hover:text-primary-600 dark:group-hover:text-primary-400 hidden sm:inline transition-colors">History</span>
                             </button>
                         )}
-                        <div>
-                            <h2 className="text-lg font-semibold text-gray-900">
-                                {isHistoryOpen ? 'Chat History' : (readOnly ? 'Chat Archive' : 'AI Assistant')}
-                            </h2>
-                            {!isHistoryOpen && patientName && (
-                                <p className="text-sm text-gray-500">{patientName}</p>
+                        <div className="flex items-center space-x-3">
+                            {!isHistoryOpen && (
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 dark:from-primary-600 dark:to-primary-700 flex items-center justify-center shadow-md">
+                                    <Bot className="w-5 h-5 text-white" />
+                                </div>
                             )}
+                            <div>
+                                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+                                    {isHistoryOpen ? 'Chat History' : (readOnly ? 'Chat Archive' : 'AI Assistant')}
+                                </h2>
+                                {!isHistoryOpen && patientName && (
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{patientName}</p>
+                                )}
+                            </div>
                         </div>
                     </div>
                     <div className="flex items-center space-x-2">
                         {!isHistoryOpen && !readOnly && (
                             <button
                                 onClick={handleNewChat}
-                                className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 shadow-sm hover:shadow-md"
                             >
                                 <Plus className="w-4 h-4" />
                                 <span>New Chat</span>
@@ -555,9 +562,10 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
                         )}
                         <button
                             onClick={onClose}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+                            title="Close"
                         >
-                            <X className="w-5 h-5 text-gray-600" />
+                            <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                         </button>
                     </div>
                 </div>
@@ -566,12 +574,12 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
                 <div className="flex-1 flex overflow-hidden">
                     {/* Chat History Sidebar */}
                     {isHistoryOpen && (
-                        <div className="w-80 border-r border-gray-200 flex flex-col bg-gray-50">
-                            <div className="p-4 border-b border-gray-200">
+                        <div className="w-80 border-r border-gray-200 dark:border-gray-700 flex flex-col bg-gray-50 dark:bg-gray-900">
+                            <div className="p-4 border-b border-gray-200 dark:border-gray-700">
                                 {!readOnly && (
                                     <button
                                         onClick={handleNewChat}
-                                        className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                                        className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-primary-600 dark:bg-primary-500 text-white rounded-lg hover:bg-primary-700 dark:hover:bg-primary-600 transition-colors"
                                     >
                                         <Plus className="w-4 h-4" />
                                         <span>New Chat</span>
@@ -580,8 +588,8 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
                             </div>
                             <div className="flex-1 overflow-y-auto p-2">
                                 {chatHistories.length === 0 ? (
-                                    <div className="text-center text-gray-500 py-8">
-                                        <MessageSquare className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                                    <div className="text-center text-gray-500 dark:text-gray-400 py-8">
+                                        <MessageSquare className="w-12 h-12 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
                                         <p>No chat history</p>
                                         <p className="text-sm">Start a new conversation</p>
                                     </div>
@@ -592,25 +600,25 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
                                                 key={chat.id}
                                                 onClick={() => handleLoadChat(chat.id)}
                                                 className={`p-3 rounded-lg cursor-pointer transition-colors group ${currentChatId === chat.id
-                                                    ? 'bg-primary-100 border border-primary-300'
-                                                    : 'hover:bg-gray-100'
+                                                    ? 'bg-primary-100 dark:bg-primary-900/30 border border-primary-300 dark:border-primary-600'
+                                                    : 'hover:bg-gray-100 dark:hover:bg-gray-800'
                                                     }`}
                                             >
                                                 <div className="flex items-start justify-between">
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium text-gray-900 truncate">
+                                                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                                                             {chat.title}
                                                         </p>
-                                                        <p className="text-xs text-gray-500 mt-1">
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                                             {new Date(chat.updatedAt).toLocaleDateString()}
                                                         </p>
                                                     </div>
                                                     {!readOnly && (
                                                         <button
                                                             onClick={(e) => handleDeleteChat(chat.id, e)}
-                                                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded transition-all"
+                                                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-all"
                                                         >
-                                                            <Trash2 className="w-4 h-4 text-red-600" />
+                                                            <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
                                                         </button>
                                                     )}
                                                 </div>
@@ -635,27 +643,27 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
                                     >
                                         <div
                                             className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${message.role === 'assistant'
-                                                ? 'bg-green-100'
-                                                : 'bg-blue-100'
+                                                ? 'bg-green-100 dark:bg-green-900/30'
+                                                : 'bg-blue-100 dark:bg-blue-900/30'
                                                 }`}
                                         >
                                             {message.role === 'assistant' ? (
-                                                <Bot className="w-5 h-5 text-green-600" />
+                                                <Bot className="w-5 h-5 text-green-600 dark:text-green-400" />
                                             ) : (
-                                                <User className="w-5 h-5 text-blue-600" />
+                                                <User className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                                             )}
                                         </div>
                                         <div className={`flex-1 ${message.role === 'user' ? 'items-end' : ''}`}>
                                             <div
                                                 className={`inline-block max-w-[80%] p-3 rounded-lg ${message.role === 'assistant'
-                                                    ? 'bg-gray-100 text-gray-900'
-                                                    : 'bg-blue-600 text-white'
-                                                    } ${message.error ? 'bg-red-100 text-red-900' : ''}`}
+                                                    ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                                                    : 'bg-blue-600 dark:bg-blue-500 text-white'
+                                                    } ${message.error ? 'bg-red-100 dark:bg-red-900/30 text-red-900 dark:text-red-200' : ''}`}
                                             >
-                                                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                                                <ReactMarkdown>{message.content}</ReactMarkdown>
                                                 {Array.isArray(message.citations) && message.citations.length > 0 ? (
-                                                    <div className="mt-2 pt-2 border-t border-gray-300">
-                                                        <p className="text-xs font-semibold mb-1">Sources:</p>
+                                                    <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-600">
+                                                        <p className="text-xs font-semibold mb-1 dark:text-gray-300">Sources:</p>
                                                         <div className="space-y-1">
                                                             {message.citations.map((citation, idx) => (
                                                                 <div
@@ -691,17 +699,17 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
                                                                             setShowPdfViewer(true);
                                                                         }
                                                                     }}
-                                                                    className={`text-xs bg-white/50 rounded p-2 transition-colors border border-transparent ${(citation.document_id || pdfDocumentId) && citation.page_number
-                                                                        ? 'hover:bg-blue-50 cursor-pointer hover:border-blue-300'
-                                                                        : 'text-gray-600'
+                                                                    className={`text-xs bg-white/50 dark:bg-gray-800/50 rounded p-2 transition-colors border border-transparent ${(citation.document_id || pdfDocumentId) && citation.page_number
+                                                                        ? 'hover:bg-blue-50 dark:hover:bg-blue-900/30 cursor-pointer hover:border-blue-300 dark:hover:border-blue-600'
+                                                                        : 'text-gray-600 dark:text-gray-400'
                                                                         }`}
                                                                     title={(citation.document_id || pdfDocumentId) && citation.page_number ? "Click to view in PDF" : "PDF not available"}
                                                                 >
                                                                     <div className="flex items-start justify-between gap-2">
                                                                         <div className="flex-1 min-w-0">
-                                                                            <p className="font-semibold flex items-center">
+                                                                            <p className="font-semibold flex items-center dark:text-gray-200">
                                                                                 {loadingPdfId === (citation.document_id || pdfDocumentId) ? (
-                                                                                    <Loader className="w-3 h-3 mr-1 animate-spin text-blue-600" />
+                                                                                    <Loader className="w-3 h-3 mr-1 animate-spin text-blue-600 dark:text-blue-400" />
                                                                                 ) : (
                                                                                     <FileText className="w-3 h-3 mr-1 flex-shrink-0" />
                                                                                 )}
@@ -710,13 +718,13 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
                                                                                 </span>
                                                                             </p>
                                                                             {citation.text_preview && (
-                                                                                <p className="text-gray-600 break-words mt-1 line-clamp-2">
+                                                                                <p className="text-gray-600 dark:text-gray-400 break-words mt-1 line-clamp-2">
                                                                                     {citation.text_preview}
                                                                                 </p>
                                                                             )}
                                                                         </div>
                                                                         {(citation.document_id || pdfDocumentId) && citation.page_number && (
-                                                                            <Eye className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                                                                            <Eye className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
                                                                         )}
                                                                     </div>
                                                                 </div>
@@ -724,12 +732,12 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
                                                         </div>
                                                     </div>
                                                 ) : message.role === 'assistant' && message.intent === 'pdf_query' ? (
-                                                    <div className="mt-2 pt-2 border-t border-gray-300">
-                                                        <p className="text-xs text-gray-500 italic">No citations found for this answer.</p>
+                                                    <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-600">
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400 italic">No citations found for this answer.</p>
                                                     </div>
                                                 ) : null}
                                             </div>
-                                            <p className="text-xs text-gray-500 mt-1">
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                                 {message.timestamp
                                                     ? new Date(message.timestamp).toLocaleTimeString([], {
                                                         hour: '2-digit',
@@ -742,14 +750,14 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
                                 ))}
                                 {isLoading && (
                                     <div className="flex items-start space-x-3">
-                                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-                                            <Bot className="w-5 h-5 text-green-600" />
+                                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                                            <Bot className="w-5 h-5 text-green-600 dark:text-green-400" />
                                         </div>
-                                        <div className="bg-gray-100 p-3 rounded-lg">
+                                        <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
                                             <div className="flex space-x-1">
-                                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                                <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                                <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                                <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                                             </div>
                                         </div>
                                     </div>
@@ -759,13 +767,17 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
 
                             {/* Input Area */}
                             {!readOnly && (
-                                <form onSubmit={handleSend} className="p-4 border-t border-gray-200">
+                                <form onSubmit={handleSend} className="p-5 border-t border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
                                     {uploadedPdf && (
-                                        <div className="mb-2 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-                                            <div className="flex items-center space-x-2">
-                                                <FileText className="w-4 h-4 text-blue-600" />
-                                                <span className="text-sm text-blue-700 font-medium">{uploadedPdf.file_name}</span>
-                                                <span className="text-xs text-blue-600">({uploadedPdf.total_pages} pages)</span>
+                                        <div className="mb-3 flex items-center justify-between bg-gradient-to-r from-blue-50 to-blue-100/50 dark:from-blue-900/40 dark:to-blue-800/30 border border-blue-200 dark:border-blue-700 rounded-xl px-4 py-3 shadow-sm">
+                                            <div className="flex items-center space-x-3">
+                                                <div className="p-1.5 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+                                                    <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">{uploadedPdf.file_name}</span>
+                                                    <span className="text-xs text-blue-600 dark:text-blue-400">{uploadedPdf.total_pages} pages</span>
+                                                </div>
                                             </div>
                                             <button
                                                 type="button"
@@ -774,49 +786,52 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
                                                     setUploadedPdf(null);
                                                     setUploadedPdfFile(null);
                                                 }}
-                                                className="text-red-600 hover:text-red-800 font-bold text-lg"
+                                                className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors group"
                                                 title="Clear PDF"
                                             >
-                                                ×
+                                                <X className="w-4 h-4 text-red-600 dark:text-red-400 group-hover:text-red-700 dark:group-hover:text-red-300" />
                                             </button>
                                         </div>
                                     )}
-                                    <div className="flex items-center space-x-2">
-                                        <input
-                                            ref={inputRef}
-                                            type="text"
-                                            value={input}
-                                            onChange={(e) => setInput(e.target.value)}
-                                            placeholder={uploadedPdf ? "Ask a question about the uploaded PDF..." : "Type your message..."}
-                                            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                            disabled={isLoading}
-                                        />
-                                        <input
-                                            type="file"
-                                            accept=".pdf"
-                                            onChange={handlePdfUpload}
-                                            disabled={uploadingPdf || isLoading}
-                                            className="hidden"
-                                            id="pdf-upload-chat-modal"
-                                        />
-                                        <label
-                                            htmlFor="pdf-upload-chat-modal"
-                                            className={`p-2 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors flex items-center justify-center ${uploadingPdf || isLoading ? 'opacity-50 cursor-not-allowed' : ''
-                                                } ${uploadedPdf ? 'bg-blue-50 border-blue-300' : ''}`}
-                                            title={uploadedPdf ? `PDF: ${uploadedPdf.file_name}` : "Upload PDF for chat context"}
-                                        >
-                                            {uploadingPdf ? (
-                                                <Loader className="w-5 h-5 animate-spin text-gray-600" />
-                                            ) : (
-                                                <Upload className={`w-5 h-5 ${uploadedPdf ? 'text-blue-600' : 'text-gray-600'}`} />
-                                            )}
-                                        </label>
+                                    <div className="flex items-end space-x-3">
+                                        <div className="flex-1 relative">
+                                            <input
+                                                ref={inputRef}
+                                                type="text"
+                                                value={input}
+                                                onChange={(e) => setInput(e.target.value)}
+                                                placeholder={uploadedPdf ? "Ask a question about the uploaded PDF..." : "Type your message..."}
+                                                className="w-full px-5 py-3.5 pr-16 border border-gray-300 dark:border-gray-600 rounded-2xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-transparent transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                                                disabled={isLoading}
+                                            />
+                                            <input
+                                                type="file"
+                                                accept=".pdf"
+                                                onChange={handlePdfUpload}
+                                                disabled={uploadingPdf || isLoading}
+                                                className="hidden"
+                                                id="pdf-upload-chat-modal"
+                                            />
+                                            <label
+                                                htmlFor="pdf-upload-chat-modal"
+                                                className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center ${uploadingPdf || isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                                                    } ${uploadedPdf ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}
+                                                title={uploadedPdf ? `PDF: ${uploadedPdf.file_name}` : "Upload PDF for chat context"}
+                                            >
+                                                {uploadingPdf ? (
+                                                    <Loader className="w-5 h-5 animate-spin" />
+                                                ) : (
+                                                    <Upload className="w-5 h-5" />
+                                                )}
+                                            </label>
+                                        </div>
                                         <button
                                             type="submit"
                                             disabled={!input.trim() || isLoading}
-                                            className="p-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                            className="px-6 py-3.5 bg-gradient-to-r from-primary-600 to-primary-700 dark:from-primary-500 dark:to-primary-600 text-white rounded-2xl hover:from-primary-700 hover:to-primary-800 dark:hover:from-primary-600 dark:hover:to-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 flex items-center justify-center space-x-2 font-medium"
                                         >
                                             <Send className="w-5 h-5" />
+                                            <span className="hidden sm:inline">Send</span>
                                         </button>
                                     </div>
                                 </form>

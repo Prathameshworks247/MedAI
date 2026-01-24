@@ -183,12 +183,16 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
                             if test_item.get("description") is None:
                                 test_item["description"] = ""
             
-            # Fix missing is_anomaly in time_series_observations
+            # Fix missing is_anomaly and null timestamps in time_series_observations
             if "time_series_observations" in result_dict:
                 for obs in result_dict["time_series_observations"]:
                     if "is_anomaly" not in obs or obs.get("is_anomaly") is None:
                         obs["is_anomaly"] = False
                         print(f"🔧 Fixed: Added missing is_anomaly=False for {obs.get('metric', 'unknown')}")
+                    # Fix null timestamps by setting current date and time
+                    if obs.get("timestamp") is None or obs.get("timestamp") == "":
+                        obs["timestamp"] = datetime.now().isoformat()
+                        print(f"🔧 Fixed: Set current timestamp for {obs.get('metric', 'unknown')} observation")
             
             # Re-validate with fixed data
             result_model = ExtractionResult.model_validate(result_dict)
@@ -205,6 +209,9 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
                 json_str = json_match.group(0)
                 # Replace null with empty string for description fields
                 json_str = re.sub(r'"description":\s*null', '"description": ""', json_str)
+                # Replace null timestamps with current ISO8601 timestamp
+                current_timestamp = datetime.now().isoformat()
+                json_str = re.sub(r'"timestamp":\s*null', f'"timestamp": "{current_timestamp}"', json_str)
                 # Parse and validate manually
                 json_obj = json.loads(json_str)
                 
@@ -224,13 +231,17 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
                     elif json_obj["patient_profile_updates"] is None:
                         json_obj["patient_profile_updates"] = {}
                 
-                # Fix missing is_anomaly in time_series_observations
+                # Fix missing is_anomaly and null timestamps in time_series_observations
                 if "time_series_observations" in json_obj:
                     for obs in json_obj["time_series_observations"]:
                         if "is_anomaly" not in obs or obs.get("is_anomaly") is None:
                             # Set default to False if missing
                             obs["is_anomaly"] = False
                             print(f"🔧 Fixed: Added missing is_anomaly=False for {obs.get('metric', 'unknown')}")
+                        # Fix null timestamps by setting current date and time
+                        if obs.get("timestamp") is None or obs.get("timestamp") == "":
+                            obs["timestamp"] = datetime.now().isoformat()
+                            print(f"🔧 Fixed: Set current timestamp for {obs.get('metric', 'unknown')} observation")
                 
                 # Create Pydantic model from fixed JSON
                 result_model = ExtractionResult.model_validate(json_obj)
@@ -257,9 +268,14 @@ def extract_clinical_info(document_text: str) -> Dict[str, Any]:
                             test_item["description"] = ""
                             print("🔧 Fixed: Converted null description to empty string (final check)")
         
-        # Final check: Ensure is_anomaly is present in time_series_observations
+        # Final check: Ensure is_anomaly is present and timestamps are not null in time_series_observations
         if "time_series_observations" in result:
             for obs in result["time_series_observations"]:
+                # Fix null timestamps by setting current date and time
+                if obs.get("timestamp") is None or obs.get("timestamp") == "":
+                    obs["timestamp"] = datetime.now().isoformat()
+                    print(f"🔧 Fixed: Set current timestamp for {obs.get('metric', 'unknown')} observation (final check)")
+                
                 if "is_anomaly" not in obs or obs.get("is_anomaly") is None:
                     # Determine if value is anomalous based on metric and value
                     metric = obs.get("metric", "").lower()

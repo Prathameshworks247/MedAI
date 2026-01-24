@@ -97,15 +97,15 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                <div className="flex items-center justify-between p-6 border-b border-gray-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 dark:bg-opacity-70 backdrop-blur-sm p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto transition-colors duration-200">
+                <div className="flex items-center justify-between p-6 border-b border-gray-100 dark:border-gray-700">
                     <div>
-                        <h2 className="text-2xl font-bold text-gray-900">Schedule Appointment</h2>
-                        <p className="text-gray-500 text-sm">For {patient.name} ({patient.id})</p>
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Schedule Appointment</h2>
+                        <p className="text-gray-500 dark:text-gray-400 text-sm">For {patient.name} ({patient.id})</p>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                        <X className="w-6 h-6 text-gray-500" />
+                    <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
+                        <X className="w-6 h-6 text-gray-500 dark:text-gray-400" />
                     </button>
                 </div>
 
@@ -116,14 +116,14 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
                             disabled={!lastAppointment}
                             onClick={() => lastAppointment && setActiveTab('continue')}
                             className={`flex-1 p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center space-y-2 ${!lastAppointment
-                                    ? 'opacity-50 cursor-not-allowed border-gray-100 bg-gray-50'
+                                    ? 'opacity-50 cursor-not-allowed border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700'
                                     : activeTab === 'continue'
-                                        ? 'border-primary-600 bg-primary-50 text-primary-900'
-                                        : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50 text-gray-600'
+                                        ? 'border-primary-600 dark:border-primary-500 bg-primary-50 dark:bg-primary-900/30 text-primary-900 dark:text-primary-200'
+                                        : 'border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300'
                                 }`}
                         >
-                            <div className={`p-3 rounded-full ${activeTab === 'continue' ? 'bg-primary-100' : 'bg-gray-100'}`}>
-                                <Activity className={`w-6 h-6 ${activeTab === 'continue' ? 'text-primary-600' : 'text-gray-500'}`} />
+                            <div className={`p-3 rounded-full ${activeTab === 'continue' ? 'bg-primary-100 dark:bg-primary-900/50' : 'bg-gray-100 dark:bg-gray-700'}`}>
+                                <Activity className={`w-6 h-6 ${activeTab === 'continue' ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'}`} />
                             </div>
                             <span className="font-semibold">Continue Care</span>
                             <span className="text-xs text-center opacity-75">
@@ -134,12 +134,12 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
                         <button
                             onClick={() => setActiveTab('new')}
                             className={`flex-1 p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center space-y-2 ${activeTab === 'new'
-                                    ? 'border-primary-600 bg-primary-50 text-primary-900'
-                                    : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50 text-gray-600'
+                                    ? 'border-primary-600 dark:border-primary-500 bg-primary-50 dark:bg-primary-900/30 text-primary-900 dark:text-primary-200'
+                                    : 'border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300'
                                 }`}
                         >
-                            <div className={`p-3 rounded-full ${activeTab === 'new' ? 'bg-primary-100' : 'bg-gray-100'}`}>
-                                <UserPlus className={`w-6 h-6 ${activeTab === 'new' ? 'text-primary-600' : 'text-gray-500'}`} />
+                            <div className={`p-3 rounded-full ${activeTab === 'new' ? 'bg-primary-100 dark:bg-primary-900/50' : 'bg-gray-100 dark:bg-gray-700'}`}>
+                                <UserPlus className={`w-6 h-6 ${activeTab === 'new' ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'}`} />
                             </div>
                             <span className="font-semibold">New Assessment</span>
                             <span className="text-xs text-center opacity-75">Start a new case</span>
@@ -148,13 +148,13 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {activeTab === 'continue' && (
-                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-6">
-                                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+                            <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg border border-gray-200 dark:border-gray-600 mb-6">
+                                <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center">
                                     <Stethoscope className="w-4 h-4 mr-2" />
                                     Previous Appointment Context
                                 </h4>
                                 {lastAppointment ? (
-                                    <div className="space-y-2 text-sm text-gray-600">
+                                    <div className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
                                         <p><span className="font-medium">Date:</span> {lastAppointment.scheduledDate}</p>
                                         <p><span className="font-medium">Type:</span> {lastAppointment.id?.split("-")[1] === '0' ? 'Initial Consultation' : 'Follow-up'}</p>
                                         <p><span className="font-medium">Chief Complaint:</span> {lastAppointment.chiefComplaint}</p>
@@ -163,7 +163,7 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
                                         )}
                                     </div>
                                 ) : (
-                                    <p className="text-sm text-yellow-600 bg-yellow-50 p-3 rounded border border-yellow-100">
+                                    <p className="text-sm text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/30 p-3 rounded border border-yellow-100 dark:border-yellow-800">
                                         No previous appointment found. This will create a new follow-up chain.
                                     </p>
                                 )}
@@ -173,9 +173,9 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
                         {activeTab === 'new' && (
                             <>
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Select Specialist</label>
+                                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">Select Specialist</label>
                                     <select
-                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                        className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                                         value={formData.doctorId}
                                         onChange={(e) => setFormData({ ...formData, doctorId: e.target.value })}
                                         required
@@ -188,9 +188,9 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Chief Complaint</label>
+                                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">Chief Complaint</label>
                                     <textarea
-                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                        className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                                         rows="3"
                                         placeholder="Describe the main reason for this visit..."
                                         value={formData.chiefComplaint}
@@ -203,20 +203,20 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
 
                         <div className="grid grid-cols-2 gap-6">
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">Date</label>
+                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">Date</label>
                                 <input
                                     type="date"
-                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                    className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                                     value={formData.date}
                                     onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                                     required
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">Start Time</label>
+                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">Start Time</label>
                                 <input
                                     type="time"
-                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                    className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-primary-500 dark:focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                                     value={formData.time}
                                     onChange={(e) => setFormData({ ...formData, time: e.target.value })}
                                     required
@@ -224,18 +224,18 @@ export default function NewAppointmentModal({ isOpen, onClose, patient, lastAppo
                             </div>
                         </div>
 
-                        <div className="flex justify-end pt-4 space-x-3 border-t border-gray-100 mt-8">
+                        <div className="flex justify-end pt-4 space-x-3 border-t border-gray-100 dark:border-gray-700 mt-8">
                             <button
                                 type="button"
                                 onClick={onClose}
-                                className="px-6 py-2.5 rounded-lg text-gray-700 font-medium hover:bg-gray-100 transition-colors"
+                                className="px-6 py-2.5 rounded-lg text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className={`px-6 py-2.5 rounded-lg bg-primary-600 text-white font-medium hover:bg-primary-700 shadow-lg shadow-primary-500/30 transition-all transform hover:-translate-y-0.5 ${loading ? 'opacity-50 cursor-wait' : ''}`}
+                                className={`px-6 py-2.5 rounded-lg bg-primary-600 dark:bg-primary-700 text-white font-medium hover:bg-primary-700 dark:hover:bg-primary-600 shadow-lg shadow-primary-500/30 transition-all transform hover:-translate-y-0.5 ${loading ? 'opacity-50 cursor-wait' : ''}`}
                             >
                                 {loading ? 'Scheduling...' : 'Schedule Appointment'}
                             </button>

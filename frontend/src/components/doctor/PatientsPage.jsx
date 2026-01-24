@@ -65,6 +65,7 @@ const PatientsPage = () => {
                         reports: apt.reports,
                         tests: apt.tests,
                         generated_diagnosis: apt.generated_diagnosis,
+                        generated_diagnosis_text: apt.generated_diagnosis_text,
                         doctor_diagnosis: apt.doctor_diagnosis
                     },
                 };

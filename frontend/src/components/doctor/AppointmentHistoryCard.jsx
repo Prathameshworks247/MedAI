@@ -242,6 +242,7 @@ const AppointmentHistoryCard = ({
                                 {session.generated_diagnosis && (
                                     <DiagnosisDashboard
                                         data={session.generated_diagnosis}
+                                        text={session.generated_diagnosis_text}
                                     />
                                 )}
                             </div>
