@@ -16,6 +16,7 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
     const [uploadedPdf, setUploadedPdf] = useState(null);
     const [uploadedPdfFile, setUploadedPdfFile] = useState(null); // Store the actual file object for viewing
     const [uploadingPdf, setUploadingPdf] = useState(false);
+    const [loadingPdfId, setLoadingPdfId] = useState(null); // Track which PDF is being loaded
     const [showPdfViewer, setShowPdfViewer] = useState(false);
     const [viewerPage, setViewerPage] = useState(1);
     const [viewerCoordinates, setViewerCoordinates] = useState(null);
@@ -39,11 +40,14 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                 const histories = response.data.map(chat => ({
                     id: chat.chat_id,
                     title: chat.title,
-                    messages: chat.messages.map(msg => ({
+                    messages: (chat.messages || []).map(msg => ({
                         role: msg.role,
                         content: msg.content,
+                        citations: Array.isArray(msg.citations) ? msg.citations : [],
                         timestamp: chat.updated_at
                     })),
+                    pdf_file_path: chat.pdf_file_path,
+                    pdf_file_name: chat.pdf_file_name,
                     createdAt: chat.created_at,
                     updatedAt: chat.updated_at
                 }));
@@ -60,6 +64,11 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
     // Auto-scroll to bottom when messages change
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        console.log('💬 Current messages state:', messages.map(m => ({
+            role: m.role,
+            hasCitations: !!m.citations?.length,
+            citationCount: m.citations?.length || 0
+        })));
     }, [messages]);
 
     // Focus input when modal opens
@@ -68,6 +77,20 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
             setTimeout(() => inputRef.current?.focus(), 100);
         }
     }, [isOpen, isHistoryOpen]);
+
+    // Debug: Log when PDF file changes
+    useEffect(() => {
+        if (uploadedPdfFile) {
+            console.log('📄 PDF file state updated:', {
+                fileName: uploadedPdfFile.name,
+                fileSize: uploadedPdfFile.size,
+                fileType: uploadedPdfFile.type,
+                hasFile: !!uploadedPdfFile
+            });
+        } else {
+            console.log('📄 PDF file state cleared');
+        }
+    }, [uploadedPdfFile]);
 
     // Save chat history to backend
     const saveChatHistory = async (chatId, chatMessages, title) => {
@@ -79,9 +102,17 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                 title: title || `Chat ${new Date().toLocaleString()}`,
                 messages: chatMessages.map(msg => ({
                     role: msg.role,
-                    content: msg.content
-                }))
+                    content: msg.content,
+                    citations: msg.citations || []
+                })),
+                pdf_file_path: uploadedPdf?.file_path || null,
+                pdf_file_name: uploadedPdf?.file_name || null
             };
+
+            console.log('📄 Saving chat history with PDF metadata:', {
+                pdf_file_path: history.pdf_file_path,
+                pdf_file_name: history.pdf_file_name
+            });
 
             const response = await apiRequest('/doctors/chat/history', {
                 method: 'POST',
@@ -93,11 +124,14 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                 const savedHistory = {
                     id: response.data.chat_id,
                     title: response.data.title,
-                    messages: response.data.messages.map(msg => ({
+                    messages: (response.data.messages || []).map(msg => ({
                         role: msg.role,
                         content: msg.content,
+                        citations: Array.isArray(msg.citations) ? msg.citations : [],
                         timestamp: response.data.updated_at
                     })),
+                    pdf_file_path: response.data.pdf_file_path,
+                    pdf_file_name: response.data.pdf_file_name,
                     createdAt: response.data.created_at,
                     updatedAt: response.data.updated_at
                 };
@@ -139,6 +173,9 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                 timestamp: new Date().toISOString(),
             }
         ]);
+        setPdfDocumentId(null);
+        setUploadedPdf(null);
+        setUploadedPdfFile(null);
         setInput('');
         setIsHistoryOpen(false);
     };
@@ -151,16 +188,54 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
             await saveChatHistory(currentChatId, messages, title);
         }
 
+        // Clear current PDF state first
+        setUploadedPdfFile(null);
+        setUploadedPdf(null);
+        setPdfDocumentId(null);
+
         const chat = chatHistories.find(h => h.id === chatId);
         if (chat) {
             setCurrentChatId(chat.id);
-            // Convert messages to format expected by component
-            const formattedMessages = chat.messages.map(msg => ({
+            // Convert messages to format expected by component, including citations
+            const formattedMessages = (chat.messages || []).map(msg => ({
                 role: msg.role,
                 content: msg.content,
+                citations: Array.isArray(msg.citations) ? msg.citations : [],
                 timestamp: msg.timestamp || chat.updatedAt
             }));
             setMessages(formattedMessages);
+            
+            // Load PDF file path from chat history if available
+            if (chat.pdf_file_path) {
+                console.log(`📄 Loading PDF for chat history: ${chat.pdf_file_path}`);
+                // Extract document_id from file path (format: storage/pdfs/{document_id}.pdf)
+                const docIdMatch = chat.pdf_file_path.match(/pdfs\/([^\/]+)\.pdf/);
+                if (docIdMatch) {
+                    const docId = docIdMatch[1];
+                    console.log(`📄 Extracted document ID: ${docId}`);
+                    setPdfDocumentId(docId);
+                    const pdfMetadata = {
+                        document_id: docId,
+                        file_name: chat.pdf_file_name || docId + '.pdf',
+                        file_path: chat.pdf_file_path,
+                        total_chunks: 0,
+                        total_pages: 0
+                    };
+                    setUploadedPdf(pdfMetadata);
+                    // Load PDF file from backend so citations can work - MUST complete before continuing
+                    try {
+                        await loadPdfFromBackend(docId, pdfMetadata.file_name);
+                        console.log(`✅ PDF loaded and ready for citations`);
+                    } catch (error) {
+                        console.error(`❌ Failed to load PDF:`, error);
+                    }
+                } else {
+                    console.warn(`⚠️ Could not extract document ID from path: ${chat.pdf_file_path}`);
+                }
+            } else {
+                console.log(`ℹ️ No PDF file path in chat history`);
+            }
+            
             setIsHistoryOpen(false);
         } else {
             // Chat not in local state, reload from backend
@@ -168,14 +243,73 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
             const refreshedChat = chatHistories.find(h => h.id === chatId);
             if (refreshedChat) {
                 setCurrentChatId(refreshedChat.id);
-                const formattedMessages = refreshedChat.messages.map(msg => ({
+                const formattedMessages = (refreshedChat.messages || []).map(msg => ({
                     role: msg.role,
                     content: msg.content,
+                    citations: Array.isArray(msg.citations) ? msg.citations : [],
                     timestamp: msg.timestamp || refreshedChat.updatedAt
                 }));
                 setMessages(formattedMessages);
+                
+                // Load PDF file path from chat history if available
+                if (refreshedChat.pdf_file_path) {
+                    // Extract document_id from file path (format: storage/pdfs/{document_id}.pdf)
+                    const docIdMatch = refreshedChat.pdf_file_path.match(/pdfs\/([^\/]+)\.pdf/);
+                    if (docIdMatch) {
+                        const docId = docIdMatch[1];
+                        setPdfDocumentId(docId);
+                        const pdfMetadata = {
+                            document_id: docId,
+                            file_name: refreshedChat.pdf_file_name || docId + '.pdf',
+                            file_path: refreshedChat.pdf_file_path,
+                            total_chunks: 0,
+                            total_pages: 0
+                        };
+                        setUploadedPdf(pdfMetadata);
+                        // Load PDF file from backend so citations can work
+                        await loadPdfFromBackend(docId, pdfMetadata.file_name);
+                    }
+                }
+                
                 setIsHistoryOpen(false);
             }
+        }
+    };
+
+    // Load PDF file from backend
+    const loadPdfFromBackend = async (documentId, fileName = null) => {
+        if (loadingPdfId === documentId) return;
+        
+        try {
+            setLoadingPdfId(documentId);
+            console.log(`📄 Loading PDF from backend: ${documentId}, filename: ${fileName}`);
+            const token = localStorage.getItem('access_token');
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+            
+            const response = await fetch(`${API_BASE_URL}/doctors/pdf/${documentId}`, {
+                method: 'GET',
+                headers: headers
+            });
+            
+            if (response.ok) {
+                const blob = await response.blob();
+                const file = new File([blob], fileName || `${documentId}.pdf`, { type: 'application/pdf' });
+                setUploadedPdfFile(file);
+                console.log(`✅ PDF loaded from backend: ${fileName || documentId}.pdf, size: ${blob.size} bytes`);
+                return file;
+            } else {
+                const errorText = await response.text();
+                console.error('Failed to load PDF from backend:', response.status, errorText);
+                return null;
+            }
+        } catch (error) {
+            console.error('Error loading PDF from backend:', error);
+            return null;
+        } finally {
+            setLoadingPdfId(null);
         }
     };
 
@@ -213,14 +347,18 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                 throw new Error(data.detail || 'Failed to upload PDF');
             }
 
-            setPdfDocumentId(data.document_id);
-            setUploadedPdf({
+            const pdfMetadata = {
                 document_id: data.document_id,
                 file_name: data.file_name,
+                file_path: data.file_path,
                 total_chunks: data.total_chunks,
                 total_pages: data.total_pages
-            });
-            setUploadedPdfFile(file); // Store the file object for viewing
+            };
+
+            setPdfDocumentId(data.document_id);
+            setUploadedPdf(pdfMetadata);
+            // Keep the file object for immediate viewing, but backend stores the path
+            setUploadedPdfFile(file);
 
             alert(`PDF uploaded successfully! ${data.total_chunks} chunks from ${data.total_pages} pages. You can now ask questions about this document.`);
         } catch (error) {
@@ -305,6 +443,8 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                     appointment_id: appointmentId,
                     conversation_history: recentHistory,
                     pdf_document_id: pdfDocumentId,
+                    pdf_file_path: uploadedPdf?.file_path || null,
+                    pdf_file_name: uploadedPdf?.file_name || null,
                     chat_id: chatIdToUse  // Include chat_id so backend can save messages
                 })
             });
@@ -326,10 +466,9 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                 });
                 
                 // Update chat_id if backend returned one (should match what we sent)
-                if (response.data.chat_id && response.data.chat_id !== chatIdToUse) {
-                    setCurrentChatId(response.data.chat_id);
-                } else if (chatIdToUse && chatIdToUse !== currentChatId) {
-                    setCurrentChatId(chatIdToUse);
+                const finalChatId = response.data.chat_id || chatIdToUse;
+                if (finalChatId && finalChatId !== currentChatId) {
+                    setCurrentChatId(finalChatId);
                 }
                 
                 // Refresh chat histories to show updated list
@@ -514,31 +653,59 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                                                 } ${message.error ? 'bg-red-100 text-red-900' : ''}`}
                                             >
                                                 <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                                                {message.citations && message.citations.length > 0 && (
+                                                {Array.isArray(message.citations) && message.citations.length > 0 ? (
                                                     <div className="mt-2 pt-2 border-t border-gray-300">
                                                         <p className="text-xs font-semibold mb-1">Sources:</p>
                                                         <div className="space-y-1">
                                                             {message.citations.map((citation, idx) => (
                                                                 <div
                                                                     key={idx}
-                                                                    onClick={() => {
-                                                                        if (uploadedPdfFile && citation.page_number) {
+                                                                    onClick={async () => {
+                                                                        const docId = citation.document_id || pdfDocumentId;
+                                                                        console.log('Citation clicked:', {
+                                                                            docId,
+                                                                            hasPdfFile: !!uploadedPdfFile,
+                                                                            pageNumber: citation.page_number,
+                                                                            citation
+                                                                        });
+
+                                                                        if (!docId) {
+                                                                            console.warn('No document ID available for citation');
+                                                                            return;
+                                                                        }
+
+                                                                        let fileToUse = uploadedPdfFile;
+                                                                        
+                                                                        // If we have a docId but no file, or a different file is loaded, load the correct one
+                                                                        if (!fileToUse || (pdfDocumentId && pdfDocumentId !== docId)) {
+                                                                            console.log('Loading PDF for citation:', docId);
+                                                                            fileToUse = await loadPdfFromBackend(docId);
+                                                                            if (fileToUse) {
+                                                                                setPdfDocumentId(docId);
+                                                                            }
+                                                                        }
+
+                                                                        if (fileToUse && citation.page_number) {
                                                                             setViewerPage(citation.page_number);
                                                                             setViewerCoordinates(citation.coordinates || null);
                                                                             setShowPdfViewer(true);
                                                                         }
                                                                     }}
                                                                     className={`text-xs bg-white/50 rounded p-2 transition-colors border border-transparent ${
-                                                                        uploadedPdfFile && citation.page_number
+                                                                        (citation.document_id || pdfDocumentId) && citation.page_number
                                                                             ? 'hover:bg-blue-50 cursor-pointer hover:border-blue-300'
                                                                             : 'text-gray-600'
                                                                     }`}
-                                                                    title={uploadedPdfFile && citation.page_number ? "Click to view in PDF" : "PDF not available"}
+                                                                    title={(citation.document_id || pdfDocumentId) && citation.page_number ? "Click to view in PDF" : "PDF not available"}
                                                                 >
                                                                     <div className="flex items-start justify-between gap-2">
                                                                         <div className="flex-1 min-w-0">
                                                                             <p className="font-semibold flex items-center">
-                                                                                <FileText className="w-3 h-3 mr-1 flex-shrink-0" />
+                                                                                {loadingPdfId === (citation.document_id || pdfDocumentId) ? (
+                                                                                    <Loader className="w-3 h-3 mr-1 animate-spin text-blue-600" />
+                                                                                ) : (
+                                                                                    <FileText className="w-3 h-3 mr-1 flex-shrink-0" />
+                                                                                )}
                                                                                 <span className="truncate">
                                                                                     {citation.page_number ? `Page ${citation.page_number}` : 'Citation'}
                                                                                 </span>
@@ -549,7 +716,7 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                                                                                 </p>
                                                                             )}
                                                                         </div>
-                                                                        {uploadedPdfFile && citation.page_number && (
+                                                                        {(citation.document_id || pdfDocumentId) && citation.page_number && (
                                                                             <Eye className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                                                                         )}
                                                                     </div>
@@ -557,7 +724,11 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName }) =
                                                             ))}
                                                         </div>
                                                     </div>
-                                                )}
+                                                ) : message.role === 'assistant' && message.intent === 'pdf_query' ? (
+                                                    <div className="mt-2 pt-2 border-t border-gray-300">
+                                                        <p className="text-xs text-gray-500 italic">No citations found for this answer.</p>
+                                                    </div>
+                                                ) : null}
                                             </div>
                                             <p className="text-xs text-gray-500 mt-1">
                                                 {message.timestamp

@@ -1,7 +1,11 @@
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
+from fastapi.responses import FileResponse
 from typing import Optional
 from pydantic import BaseModel, Field
 import uuid
+import os
+import shutil
+import json
 
 from src.db import user_collection, chat_history_collection
 from datetime import datetime
@@ -20,6 +24,7 @@ router = APIRouter()
 class ChatMessage(BaseModel):
     role: str = Field(..., description="Message role: 'user' or 'assistant'")
     content: str = Field(..., description="Message content")
+    citations: list[dict] = Field(default=[], description="PDF citations with page numbers and coordinates (for assistant messages)")
 
 class ChatRequest(BaseModel):
     question: str = Field(..., description="The doctor's question about the patient")
@@ -27,6 +32,8 @@ class ChatRequest(BaseModel):
     appointment_id: str = Field(..., description="Appointment ID (required) - chatbot is appointment-specific. Context includes current appointment and previous 2 appointments + base")
     conversation_history: Optional[list[ChatMessage]] = Field(default=[], description="Previous conversation messages for context")
     pdf_document_id: Optional[str] = Field(default=None, description="Optional PDF document ID to use for context (if provided, only PDF context is used)")
+    pdf_file_path: Optional[str] = Field(default=None, description="Path to PDF file for this chat")
+    pdf_file_name: Optional[str] = Field(default=None, description="Original PDF file name")
     chat_id: Optional[str] = Field(default=None, description="Chat history ID to save messages to")
 
 
@@ -45,6 +52,8 @@ class ChatHistoryRequest(BaseModel):
     patient_id: str = Field(..., description="Patient ID")
     title: str = Field(..., description="Chat title")
     messages: list[ChatMessage] = Field(..., description="List of messages in the chat")
+    pdf_file_path: Optional[str] = Field(default=None, description="Path to PDF file associated with this chat")
+    pdf_file_name: Optional[str] = Field(default=None, description="Original PDF file name")
 
 
 class ChatHistoryResponse(BaseModel):
@@ -53,6 +62,8 @@ class ChatHistoryResponse(BaseModel):
     patient_id: str = Field(..., description="Patient ID")
     title: str = Field(..., description="Chat title")
     messages: list[ChatMessage] = Field(..., description="List of messages")
+    pdf_file_path: Optional[str] = Field(default=None, description="Path to PDF file associated with this chat")
+    pdf_file_name: Optional[str] = Field(default=None, description="Original PDF file name")
     created_at: str = Field(..., description="Creation timestamp")
     updated_at: str = Field(..., description="Last update timestamp")
 
@@ -60,6 +71,7 @@ class ChatHistoryResponse(BaseModel):
 class PDFUploadResponse(BaseModel):
     document_id: str = Field(..., description="Unique document ID for referencing in chat")
     file_name: str = Field(..., description="Original file name")
+    file_path: str = Field(..., description="Path to stored PDF file")
     total_chunks: int = Field(..., description="Number of text chunks created")
     total_pages: int = Field(..., description="Total pages in PDF")
     status: str = Field(..., description="Processing status")
@@ -164,6 +176,7 @@ async def doctor_chat(
                 # Extract citations
                 citations = [
                     {
+                        "document_id": request.pdf_document_id,
                         "page_number": result["page_number"],
                         "coordinates": result["coordinates"],
                         "text_preview": result["text"][:200] + "..." if len(result["text"]) > 200 else result["text"],
@@ -257,23 +270,43 @@ async def doctor_chat(
                 chat_history = await chat_history_collection.find_one({"_id": chat_id})
                 
                 # Prepare messages to save
-                user_message = ChatMessage(role="user", content=question)
-                assistant_message = ChatMessage(role="assistant", content=answer_str)
+                user_message = ChatMessage(role="user", content=question, citations=[])
+                assistant_message = ChatMessage(role="assistant", content=answer_str, citations=citations or [])
+                
+                # Use model_dump() for Pydantic v2, fallback to dict() for v1
+                try:
+                    user_msg_dict = user_message.model_dump() if hasattr(user_message, 'model_dump') else user_message.dict()
+                    assistant_msg_dict = assistant_message.model_dump() if hasattr(assistant_message, 'model_dump') else assistant_message.dict()
+                except:
+                    user_msg_dict = user_message.dict()
+                    assistant_msg_dict = assistant_message.dict()
+                
+                # Ensure citations are included (in case dict() doesn't include default values)
+                if "citations" not in user_msg_dict:
+                    user_msg_dict["citations"] = []
+                if "citations" not in assistant_msg_dict:
+                    assistant_msg_dict["citations"] = citations or []
+                
+                print(f"📊 SAVING TO DB - Assistant citations: {json.dumps(assistant_msg_dict['citations'])}")
                 
                 if chat_history:
                     # Update existing chat
                     updated_messages = chat_history.get("messages", []) + [
-                        user_message.dict(),
-                        assistant_message.dict()
+                        user_msg_dict,
+                        assistant_msg_dict
                     ]
+                    update_data = {
+                        "messages": updated_messages,
+                        "updated_at": datetime.now()
+                    }
+                    # Update PDF file path and name if provided
+                    if request.pdf_file_path:
+                        update_data["pdf_file_path"] = request.pdf_file_path
+                    if request.pdf_file_name:
+                        update_data["pdf_file_name"] = request.pdf_file_name
                     await chat_history_collection.update_one(
                         {"_id": chat_id},
-                        {
-                            "$set": {
-                                "messages": updated_messages,
-                                "updated_at": datetime.now()
-                            }
-                        }
+                        {"$set": update_data}
                     )
                 else:
                     # Create new chat history
@@ -284,7 +317,9 @@ async def doctor_chat(
                         "patient_id": patient_id,
                         "appointment_id": request.appointment_id,
                         "title": title,
-                        "messages": [user_message.dict(), assistant_message.dict()],
+                        "messages": [user_msg_dict, assistant_msg_dict],
+                        "pdf_file_path": request.pdf_file_path,
+                        "pdf_file_name": request.pdf_file_name,
                         "created_at": datetime.now(),
                         "updated_at": datetime.now()
                     }
@@ -323,6 +358,7 @@ async def upload_pdf_for_chat(
     """
     Upload a PDF file for chatbot context.
     The PDF will be processed, chunked with coordinates, and stored in FAISS vector store.
+    The file will be saved to disk for later access.
     When a PDF document_id is provided in chat requests, only this PDF's context will be used.
     """
     try:
@@ -347,15 +383,32 @@ async def upload_pdf_for_chat(
         # Generate unique document ID
         document_id = str(uuid.uuid4())
         
+        # Create storage directory if it doesn't exist
+        storage_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "storage", "pdfs")
+        os.makedirs(storage_dir, exist_ok=True)
+        
+        # Save file to disk
+        file_path = os.path.join(storage_dir, f"{document_id}.pdf")
+        content = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(content)
+        
+        # Reset file pointer for processing
+        await file.seek(0)
+        
         # Process PDF
         print(f"📄 Processing PDF: {file.filename}")
         result = await pdf_rag_service.process_pdf(file, document_id)
         
-        print(f"✅ PDF processed: {result['total_chunks']} chunks from {result['total_pages']} pages")
+        print(f"✅ PDF processed: {result['total_chunks']} chunks from {result['total_pages']} pages, saved to {file_path}")
+        
+        # Return relative path for API access
+        relative_path = f"storage/pdfs/{document_id}.pdf"
         
         return PDFUploadResponse(
             document_id=document_id,
             file_name=file.filename or "unknown.pdf",
+            file_path=relative_path,
             total_chunks=result['total_chunks'],
             total_pages=result['total_pages'],
             status=result['status']
@@ -398,12 +451,23 @@ async def save_chat_history(
         if request.chat_id:
             # Update existing chat
             chat_id = request.chat_id
+            
+            # Prepare messages with explicit citations
+            messages_to_save = []
+            for msg in request.messages:
+                msg_dict = msg.model_dump() if hasattr(msg, 'model_dump') else msg.dict()
+                if "citations" not in msg_dict:
+                    msg_dict["citations"] = msg.citations or []
+                messages_to_save.append(msg_dict)
+
             result = await chat_history_collection.update_one(
                 {"_id": chat_id, "doctor_id": doctor_id},
                 {
                     "$set": {
                         "title": request.title,
-                        "messages": [msg.dict() for msg in request.messages],
+                        "messages": messages_to_save,
+                        "pdf_file_path": request.pdf_file_path,
+                        "pdf_file_name": request.pdf_file_name,
                         "updated_at": now
                     }
                 }
@@ -424,13 +488,24 @@ async def save_chat_history(
         else:
             # Create new chat
             chat_id = str(uuid.uuid4())
+            
+            # Prepare messages with explicit citations
+            messages_to_save = []
+            for msg in request.messages:
+                msg_dict = msg.model_dump() if hasattr(msg, 'model_dump') else msg.dict()
+                if "citations" not in msg_dict:
+                    msg_dict["citations"] = msg.citations or []
+                messages_to_save.append(msg_dict)
+
             new_chat = {
                 "_id": chat_id,
                 "doctor_id": doctor_id,
                 "patient_id": request.patient_id,
                 "appointment_id": request.appointment_id,
                 "title": request.title,
-                "messages": [msg.dict() for msg in request.messages],
+                "messages": messages_to_save,
+                "pdf_file_path": request.pdf_file_path,
+                "pdf_file_name": request.pdf_file_name,
                 "created_at": now,
                 "updated_at": now
             }
@@ -453,6 +528,8 @@ async def save_chat_history(
             patient_id=final_history["patient_id"],
             title=final_history["title"],
             messages=[ChatMessage(**msg) for msg in final_history["messages"]],
+            pdf_file_path=final_history.get("pdf_file_path"),
+            pdf_file_name=final_history.get("pdf_file_name"),
             created_at=final_history["created_at"].isoformat() if isinstance(final_history["created_at"], datetime) else str(final_history["created_at"]),
             updated_at=final_history["updated_at"].isoformat() if isinstance(final_history["updated_at"], datetime) else str(final_history["updated_at"])
         )
@@ -466,6 +543,40 @@ async def save_chat_history(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to save chat history: {str(e)}"
+        )
+
+
+@router.get("/pdf/{document_id}")
+async def get_pdf_file(
+    document_id: str,
+    doctor: dict = Depends(check_doctor_exists)
+):
+    """
+    Serve PDF file by document_id.
+    """
+    try:
+        # Construct file path
+        storage_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "storage", "pdfs")
+        file_path = os.path.join(storage_dir, f"{document_id}.pdf")
+        
+        if not os.path.exists(file_path):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="PDF file not found"
+            )
+        
+        return FileResponse(
+            file_path,
+            media_type="application/pdf",
+            filename=f"{document_id}.pdf"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error serving PDF: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to serve PDF: {str(e)}"
         )
 
 
@@ -487,15 +598,25 @@ async def get_chat_histories(
         }).sort("updated_at", -1).limit(50)  # Limit to last 50 chats
         
         histories = await cursor.to_list(length=50)
+        print(f"📊 Loaded {len(histories)} chats from DB for appointment {appointment_id}")
         
         result = []
         for history in histories:
+            chat_messages = []
+            for msg in history["messages"]:
+                chat_msg = ChatMessage(**msg)
+                chat_messages.append(chat_msg)
+                if chat_msg.role == "assistant" and chat_msg.citations:
+                    print(f"✅ Chat {history['_id']} has {len(chat_msg.citations)} citations")
+            
             result.append(ChatHistoryResponse(
                 chat_id=str(history["_id"]),
                 appointment_id=history["appointment_id"],
                 patient_id=history["patient_id"],
                 title=history["title"],
-                messages=[ChatMessage(**msg) for msg in history["messages"]],
+                messages=chat_messages,
+                pdf_file_path=history.get("pdf_file_path"),
+                pdf_file_name=history.get("pdf_file_name"),
                 created_at=history["created_at"].isoformat() if isinstance(history["created_at"], datetime) else str(history["created_at"]),
                 updated_at=history["updated_at"].isoformat() if isinstance(history["updated_at"], datetime) else str(history["updated_at"])
             ))
