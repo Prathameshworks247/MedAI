@@ -151,6 +151,8 @@ async def generate_diagnosis(patient_id: str, appointment_id: str) -> str:
 
 Your task is to analyze comprehensive patient data and generate 5 potential diagnoses ranked by confidence.
 
+**CRITICAL: Your entire response MUST be formatted using Markdown.** Use headers, bullet points, bold text, and tables to make the analysis clear and professional.
+
 CRITICAL RULES:
 1. **USE ALL AVAILABLE DATA**: Analyze patient medical history, all appointment discussions, test results, reports, and chief complaints
 2. **COMPREHENSIVE REASONING**: For the primary diagnosis (highest confidence), provide a detailed, step-by-step reasoning chain that shows your complete thought process. Use the full extent of your medical knowledge.
