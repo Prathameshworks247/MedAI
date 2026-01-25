@@ -245,15 +245,24 @@ async def generate_multilingual_response(
         # Validate user message is not empty
         if not user_message or user_message.strip() == "":
             raise ValueError("User message cannot be empty")
-        # Get language name from code
+
+        # Sanitize target language
+        target_language = target_language.strip()
+        print(f"🔍 DEBUG generate_multilingual_response called with target_language: '{target_language}'")
+
+        # Get language name using direct lookup
         lang_name = None
-        for lang_key, lang_info in SUPPORTED_LANGUAGES.items():
+        for lang_info in SUPPORTED_LANGUAGES.values():
             if lang_info["code"] == target_language:
                 lang_name = lang_info["name"]
                 break
 
         if not lang_name:
             lang_name = "Hindi"  # Default fallback
+            print(f"⚠️ WARNING: Language code '{target_language}' not found in supported languages, defaulting to Hindi")
+            print(f"ℹ️ Supported codes: {[l['code'] for l in SUPPORTED_LANGUAGES.values()]}")
+        else:
+            print(f"✅ DEBUG: Found language name: {lang_name} for code: {target_language}")
 
         # Build system prompt with language instruction
         system_prompt = f"""You are a helpful health assistant chatbot for patients.
@@ -262,8 +271,9 @@ async def generate_multilingual_response(
 You MUST respond COMPLETELY and ONLY in {lang_name} language.
 - Do NOT use English at all, except for medical terms without common translations
 - Do NOT write any part of your response in English
-- Every word must be in {lang_name}
-- If the language is Hindi, use Devanagari script
+- Every single word must be in {lang_name} language, NOT in any other Indian language
+- If {lang_name} uses Devanagari script (like Hindi, Marathi), use it correctly for that specific language
+- {lang_name} is NOT the same as Hindi - ensure vocabulary and grammar are correct for {lang_name}
 - If you don't understand the question, respond in {lang_name} asking for clarification
 - NEVER mix languages in your response
 
@@ -275,10 +285,13 @@ Guidelines:
 5. For emergencies, advise calling emergency services immediately (in {lang_name})
 6. ALWAYS provide a complete, meaningful answer - never give generic greetings unless appropriate
 
-Language Target: {lang_name} ONLY
-Output Format: Pure {lang_name} text (with English transliteration in parentheses if helpful for pronunciation)
+Language Target: {lang_name} ONLY (NOT Hindi, NOT English, NOT any other language)
+Output Format: Pure {lang_name} text only
 
-Remember: Your entire response MUST be in {lang_name}. Do not respond in English under any circumstances."""
+Remember:
+- Your ENTIRE response MUST be in {lang_name} language
+- Do not respond in English, Hindi, or any other language
+- The user specifically requested {lang_name}, so use the correct vocabulary, grammar, and expressions for {lang_name}"""
 
         # Build messages
         messages = [SystemMessage(content=system_prompt)]
@@ -457,6 +470,10 @@ async def process_multilingual_message(
         Dict with response_text, response_audio (base64), and translated_input
     """
     try:
+        # Sanitize language inputs
+        target_language = target_language.strip()
+        source_language = source_language.strip()
+
         # Step 1: Get English text from input
         if audio_data:
             # Speech to English translation

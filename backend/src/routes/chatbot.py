@@ -2,7 +2,7 @@
 Chatbot API Routes for Multilingual Patient Interactions
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, status
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
@@ -87,9 +87,9 @@ async def chat_with_text(request: TextChatRequest):
 @router.post("/voice", response_model=ChatResponse)
 async def chat_with_voice(
     audio_file: UploadFile = File(...),
-    source_language: str = "hi-IN",
-    target_language: str = "hi-IN",
-    generate_audio: bool = True
+    source_language: str = Form("en-IN"),
+    target_language: str = Form("en-IN"),
+    generate_audio: bool = Form(True)
 ):
     """
     Send a voice message to the chatbot and get a multilingual response.
@@ -104,6 +104,10 @@ async def chat_with_voice(
         ChatResponse with response_text, response_audio, and translated_input (English)
     """
     try:
+        print(f"🔍 DEBUG: Received /chatbot/voice request")
+        print(f"🔍 DEBUG: source_language = {source_language}")
+        print(f"🔍 DEBUG: target_language = {target_language}")
+        print(f"🔍 DEBUG: generate_audio = {generate_audio}")
         # Validate languages
         if source_language not in [lang["code"] for lang in SUPPORTED_LANGUAGES.values()]:
             raise HTTPException(
