@@ -54,6 +54,11 @@ const Chatbot = () => {
         };
     }, []);
 
+    // Debug: Log whenever selectedLanguage changes
+    useEffect(() => {
+        console.log('🔍 DEBUG: selectedLanguage state updated to:', selectedLanguage);
+    }, [selectedLanguage]);
+
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
@@ -120,6 +125,7 @@ const Chatbot = () => {
 
     const startRecording = async () => {
         try {
+            console.log('🔍 DEBUG: Starting recording with selectedLanguage =', selectedLanguage);
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const mediaRecorder = new MediaRecorder(stream);
             mediaRecorderRef.current = mediaRecorder;
@@ -158,11 +164,18 @@ const Chatbot = () => {
         setIsProcessingAudio(true);
 
         try {
+            console.log('🔍 DEBUG: selectedLanguage state =', selectedLanguage);
+            console.log('🔍 DEBUG: SUPPORTED_LANGUAGES[selectedLanguage] =', SUPPORTED_LANGUAGES[selectedLanguage]);
+
             const formData = new FormData();
             formData.append('audio_file', audioBlob, 'recording.wav');
             formData.append('source_language', selectedLanguage);
             formData.append('target_language', selectedLanguage);
-            formData.append('generate_audio', 'false');
+            formData.append('generate_audio', 'true');
+
+            console.log('🔍 DEBUG: FormData contents:');
+            console.log('  - source_language:', selectedLanguage);
+            console.log('  - target_language:', selectedLanguage);
 
             const response = await fetch('http://localhost:8000/chatbot/voice', {
                 method: 'POST',
@@ -342,7 +355,10 @@ const Chatbot = () => {
                         <div className="relative group">
                             <select
                                 value={selectedLanguage}
-                                onChange={(e) => setSelectedLanguage(e.target.value)}
+                                onChange={(e) => {
+                                    console.log('🔍 DEBUG: Language changed from', selectedLanguage, 'to', e.target.value);
+                                    setSelectedLanguage(e.target.value);
+                                }}
                                 className="appearance-none bg-gray-50 dark:bg-gray-700 border-0 text-gray-700 dark:text-gray-200 text-sm rounded-full py-2 pl-4 pr-8 focus:ring-2 focus:ring-blue-500 cursor-pointer font-medium hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                             >
                                 {Object.entries(SUPPORTED_LANGUAGES).map(([code, name]) => (
