@@ -14,6 +14,10 @@ pydantic
 langchain-community
 pydub
 pdfplumber
+PyPDF2
+pymupdf
+pytesseract
+Pillow
 faiss-cpu
 sentence-transformers
 torch

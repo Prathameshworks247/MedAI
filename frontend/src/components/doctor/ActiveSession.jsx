@@ -10,6 +10,18 @@ import AppointmentHistoryCard from './AppointmentHistoryCard';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
+function formatApiErrorDetail(detail) {
+    if (detail == null) return null;
+    if (typeof detail === 'string') return detail;
+    if (typeof detail === 'object') {
+        const msg = detail.message || 'Request failed';
+        const errs = detail.errors;
+        if (Array.isArray(errs) && errs.length) return `${msg}: ${errs.join('; ')}`;
+        return msg;
+    }
+    return String(detail);
+}
+
 const RequiredActivities = ({ session }) => (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border border-gray-100 dark:border-gray-700 mb-6 transition-colors duration-200">
         <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Required Activities</h3>
@@ -735,7 +747,8 @@ const ActiveSession = () => {
                 }
 
                 if (!response.ok) {
-                    throw new Error(data.detail || `HTTP error! status: ${response.status}`);
+                    const errMsg = formatApiErrorDetail(data.detail) || `HTTP error! status: ${response.status}`;
+                    throw new Error(errMsg);
                 }
 
                 const apiResponse = { success: true, data };
@@ -782,7 +795,8 @@ const ActiveSession = () => {
             alert(`Successfully uploaded ${results.length} ${type}(s)`);
         } catch (error) {
             console.error('Error uploading documents:', error);
-            alert(`Error uploading documents: ${error.message}`);
+            const msg = error?.message || 'Upload failed';
+            alert(`Error uploading documents: ${msg}`);
         } finally {
             setUploading(false);
             // Reset file input
@@ -821,7 +835,8 @@ const ActiveSession = () => {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.detail || 'Failed to upload PDF');
+                const errMsg = formatApiErrorDetail(data.detail) || 'Failed to upload PDF';
+                throw new Error(errMsg);
             }
 
             setPdfDocumentId(data.document_id);

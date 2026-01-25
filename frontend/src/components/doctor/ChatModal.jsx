@@ -5,6 +5,18 @@ import PDFViewer from './PDFViewer';
 import ReactMarkdown from "react-markdown";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
+function formatApiErrorDetail(detail) {
+    if (detail == null) return null;
+    if (typeof detail === 'string') return detail;
+    if (typeof detail === 'object') {
+        const msg = detail.message || 'Request failed';
+        const errs = detail.errors;
+        if (Array.isArray(errs) && errs.length) return `${msg}: ${errs.join('; ')}`;
+        return msg;
+    }
+    return String(detail);
+}
+
 const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, readOnly = false }) => {
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     const [chatHistories, setChatHistories] = useState([]);
@@ -344,7 +356,8 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.detail || 'Failed to upload PDF');
+                const errMsg = formatApiErrorDetail(data.detail) || 'Failed to upload PDF';
+                throw new Error(errMsg);
             }
 
             const pdfMetadata = {

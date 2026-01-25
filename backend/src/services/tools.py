@@ -635,10 +635,16 @@ save_to_mongo = StructuredTool.from_function(
 )
 
 
+# Min extracted chars below which we try OCR (handles "nearly empty" / image-heavy PDFs)
+_OCR_FALLBACK_TEXT_THRESHOLD = 50
+
+
 @tool
 def extract_text_from_pdf(file_path: str) -> str:
     """
     Extract raw text from a PDF file.
+    If the PDF has no extractable text (or very little) but contains pages (e.g. image-only/scanned),
+    falls back to Tesseract OCR to extract text from page images, then passes to Gemini.
     
     Args:
         file_path: Path to the PDF file
@@ -646,28 +652,67 @@ def extract_text_from_pdf(file_path: str) -> str:
     Returns:
         Extracted text as a string
     """
+    from src.utils.pdf import extract_text_from_pdf_ocr_fallback
+
+    def _try_ocr_fallback():
+        print(f"[extract_text_from_pdf] No/little text extracted; using OCR fallback for {file_path!r}")
+        ocr_text = extract_text_from_pdf_ocr_fallback(file_path)
+        if ocr_text and not ocr_text.startswith("Error ") and not ocr_text.startswith("OCR fallback unavailable"):
+            print(f"[extract_text_from_pdf] OCR fallback succeeded ({len(ocr_text)} chars)")
+            return ocr_text
+        if not ocr_text or not ocr_text.strip():
+            raise ValueError("PDF has no text layer and OCR found no text.")
+        raise ValueError(ocr_text)
+
+    def _should_use_ocr(text: str, page_count: int) -> bool:
+        if page_count < 1:
+            return False
+        s = (text or "").strip()
+        return len(s) < _OCR_FALLBACK_TEXT_THRESHOLD
+
     try:
         import pdfplumber
-        
+
         text_content = []
+        page_count = 0
         with pdfplumber.open(file_path) as pdf:
+            page_count = len(pdf.pages)
             for page in pdf.pages:
                 page_text = page.extract_text()
-                if page_text:
+                if page_text is not None and page_text.strip():
                     text_content.append(page_text)
-        
-        return "\n".join(text_content)
+
+        text = "\n".join(text_content)
+
+        if _should_use_ocr(text, page_count):
+            return _try_ocr_fallback()
+
+        return text
     except ImportError:
-        # Fallback if pdfplumber not installed
         try:
-            import PyPDF2 #pyright: ignore[reportMissingImports]
+            import PyPDF2  # pyright: ignore[reportMissingImports]
+
             text_content = []
+            page_count = 0
             with open(file_path, "rb") as file:
                 pdf_reader = PyPDF2.PdfReader(file)
+                page_count = len(pdf_reader.pages)
                 for page in pdf_reader.pages:
-                    text_content.append(page.extract_text())
-            return "\n".join(text_content)
+                    t = page.extract_text()
+                    if t and str(t).strip():
+                        text_content.append(t)
+
+            text = "\n".join(text_content)
+
+            if _should_use_ocr(text, page_count):
+                return _try_ocr_fallback()
+
+            return text
+        except ValueError:
+            raise
         except Exception as e:
             return f"Error extracting PDF text: {str(e)}"
+    except ValueError:
+        raise
     except Exception as e:
         return f"Error extracting PDF text: {str(e)}"

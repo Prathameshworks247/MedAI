@@ -44,24 +44,26 @@ async def ingest_document(
             )
             
             if result["errors"]:
+                extracted = result.get("extracted_text") or ""
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail={
                         "message": "Errors occurred during processing",
                         "errors": result["errors"],
                         "partial_results": {
-                            "extracted_text_length": len(result.get("extracted_text", "")),
+                            "extracted_text_length": len(extracted),
                             "extracted_info": result.get("extracted_info"),
                             "save_result": result.get("save_result")
                         }
                     }
                 )
             
+            extracted = result.get("extracted_text") or ""
             return {
                 "status": "success",
                 "message": "Document processed and saved successfully",
                 "results": {
-                    "text_extracted": len(result.get("extracted_text", "")) > 0,
+                    "text_extracted": len(extracted) > 0,
                     "info_extracted": result.get("extracted_info") is not None,
                     "saved_to_db": result.get("save_result") is not None
                 }
