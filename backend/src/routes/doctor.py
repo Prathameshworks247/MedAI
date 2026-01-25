@@ -180,6 +180,7 @@ async def doctor_chat(
                         "page_number": result["page_number"],
                         "coordinates": result["coordinates"],
                         "text_preview": result["text"][:200] + "..." if len(result["text"]) > 200 else result["text"],
+                        "text": result["text"],  # Include full text for accurate highlighting
                         "score": result["score"]
                     }
                     for result in search_results

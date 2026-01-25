@@ -21,6 +21,7 @@ Pillow
 faiss-cpu
 sentence-transformers
 torch
+tiktoken
 boto3
 websockets
 certifi

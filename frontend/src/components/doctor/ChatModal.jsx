@@ -32,6 +32,7 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
     const [showPdfViewer, setShowPdfViewer] = useState(false);
     const [viewerPage, setViewerPage] = useState(1);
     const [viewerCoordinates, setViewerCoordinates] = useState(null);
+    const [viewerChunkText, setViewerChunkText] = useState(null);
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
 
@@ -710,6 +711,8 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
                                                                             if (fileToUse && citation.page_number) {
                                                                                 setViewerPage(citation.page_number);
                                                                                 setViewerCoordinates(citation.coordinates || null);
+                                                                                // Pass the chunk text for accurate highlighting (prefer full text)
+                                                                                setViewerChunkText(citation.text || citation.text_preview || null);
                                                                                 setShowPdfViewer(true);
                                                                             }
                                                                         }}
@@ -861,9 +864,11 @@ const ChatModal = ({ isOpen, onClose, appointmentId, patientId, patientName, rea
                         pdfFile={uploadedPdfFile}
                         pageNumber={viewerPage}
                         coordinates={viewerCoordinates}
+                        chunkText={viewerChunkText}
                         onClose={() => {
                             setShowPdfViewer(false);
                             setViewerCoordinates(null);
+                            setViewerChunkText(null);
                         }}
                     />
                 )}

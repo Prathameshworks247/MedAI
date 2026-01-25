@@ -307,6 +307,7 @@ const ActiveSession = () => {
     const [showPdfViewer, setShowPdfViewer] = useState(false);
     const [viewerPage, setViewerPage] = useState(1);
     const [viewerCoordinates, setViewerCoordinates] = useState(null);
+    const [viewerChunkText, setViewerChunkText] = useState(null);
 
     // Doctor's diagnosis state
     const [doctorDiagnosisText, setDoctorDiagnosisText] = useState('');
@@ -1691,9 +1692,11 @@ const ActiveSession = () => {
                     pdfFile={uploadedPdfFile}
                     pageNumber={viewerPage}
                     coordinates={viewerCoordinates}
+                    chunkText={viewerChunkText}
                     onClose={() => {
                         setShowPdfViewer(false);
                         setViewerCoordinates(null);
+                        setViewerChunkText(null);
                     }}
                 />
             )}

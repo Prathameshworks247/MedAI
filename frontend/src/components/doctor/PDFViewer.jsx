@@ -9,7 +9,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
  * PDF Viewer Component with Coordinate-based Highlighting
  * Uses pdfjs-dist to render PDF on canvas - no scrolling, full control
  */
-const PDFViewer = ({ pdfFile, pageNumber, coordinates, onClose }) => {
+const PDFViewer = ({ pdfFile, pageNumber, coordinates, chunkText, onClose }) => {
     const canvasRef = useRef(null);
     const textLayerRef = useRef(null);
     const containerRef = useRef(null);
@@ -60,7 +60,22 @@ const PDFViewer = ({ pdfFile, pageNumber, coordinates, onClose }) => {
         };
     }, [pdfFile]);
 
-    // Load specific page
+    // Calculate optimal scale function - fit to width but allow vertical scrolling
+    const calculateOptimalScale = (pdfPage, container) => {
+        if (!container || !pdfPage) return 1.5; // Default scale
+        
+        const containerWidth = container.clientWidth - 32; // Account for padding
+        const pageViewport = pdfPage.getViewport({ scale: 1.0 });
+        
+        // Calculate scale to fit width, allowing vertical scrolling
+        const scaleX = containerWidth / pageViewport.width;
+        // Use a reasonable scale (fit to width, but allow it to be larger for scrolling)
+        const optimalScale = Math.min(scaleX * 0.95, 2.0); // 95% of width fit, max 2x
+        
+        return optimalScale;
+    };
+
+    // Load specific page and calculate optimal scale
     useEffect(() => {
         if (!pdf || !pageNumber) return;
 
@@ -73,8 +88,19 @@ const PDFViewer = ({ pdfFile, pageNumber, coordinates, onClose }) => {
 
                 if (isMounted) {
                     setPage(pdfPage);
-                    const vp = pdfPage.getViewport({ scale });
-                    setViewport(vp);
+                    
+                    // Calculate optimal scale to fit container
+                    const container = containerRef.current;
+                    if (container) {
+                        const optimalScale = calculateOptimalScale(pdfPage, container);
+                        const vp = pdfPage.getViewport({ scale: optimalScale });
+                        setViewport(vp);
+                        setScale(optimalScale);
+                    } else {
+                        // Fallback to default scale
+                        const vp = pdfPage.getViewport({ scale });
+                        setViewport(vp);
+                    }
                 }
             } catch (err) {
                 console.error('Error loading page:', err);
@@ -93,7 +119,27 @@ const PDFViewer = ({ pdfFile, pageNumber, coordinates, onClose }) => {
         return () => {
             isMounted = false;
         };
-    }, [pdf, pageNumber, scale]);
+    }, [pdf, pageNumber]);
+
+    // Handle window resize to recalculate scale (only adjust width, allow vertical scroll)
+    useEffect(() => {
+        if (!page || !viewport) return;
+
+        const handleResize = () => {
+            const container = containerRef.current;
+            if (container && page) {
+                const optimalScale = calculateOptimalScale(page, container);
+                if (Math.abs(optimalScale - scale) > 0.05) { // Only update if significant change
+                    const vp = page.getViewport({ scale: optimalScale });
+                    setViewport(vp);
+                    setScale(optimalScale);
+                }
+            }
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, [page, viewport, scale]);
 
     // Render page to canvas and extract text
     useEffect(() => {
@@ -163,11 +209,69 @@ const PDFViewer = ({ pdfFile, pageNumber, coordinates, onClose }) => {
     }, [page, viewport]);
 
     // Helper function to find which text items should be highlighted
-    const getHighlightedTextItems = (bbox, viewport, pageHeight, allTextItems) => {
+    const getHighlightedTextItems = (bbox, viewport, pageHeight, allTextItems, chunkText = null) => {
         const [x0, y0, x1, y1] = bbox;
         const highlightedIndices = new Set();
 
-        // Find all text items that overlap with or are near the bbox
+        // First, try to match by text content if chunk text is provided
+        if (chunkText && chunkText.trim()) {
+            const chunkTextLower = chunkText.trim().toLowerCase().replace(/\s+/g, ' ');
+            // Get first 50-100 characters for matching (avoid truncation issues)
+            const chunkPreview = chunkTextLower.substring(0, Math.min(150, chunkTextLower.length));
+            const chunkWords = chunkPreview.split(/\s+/).filter(w => w.length > 1);
+            
+            if (chunkWords.length > 0) {
+                // Build text from PDF items
+                let pdfText = '';
+                const textItemMap = []; // Map text position to item index
+                
+                allTextItems.forEach((item, index) => {
+                    const itemText = (item.str || '').trim();
+                    if (itemText) {
+                        textItemMap.push({ index, startPos: pdfText.length, endPos: pdfText.length + itemText.length });
+                        pdfText += (pdfText ? ' ' : '') + itemText.toLowerCase();
+                    }
+                });
+                
+                // Try to find the chunk text in the PDF text
+                const searchStart = pdfText.indexOf(chunkWords[0]);
+                if (searchStart !== -1) {
+                    // Found the start, now find the end
+                    let foundEnd = searchStart;
+                    let matchedChars = 0;
+                    
+                    // Try to match as much of the chunk as possible
+                    for (let i = 0; i < chunkWords.length && foundEnd < pdfText.length; i++) {
+                        const wordPos = pdfText.indexOf(chunkWords[i], foundEnd);
+                        if (wordPos !== -1 && wordPos - foundEnd < 50) { // Words should be close together
+                            foundEnd = wordPos + chunkWords[i].length;
+                            matchedChars += chunkWords[i].length;
+                        } else {
+                            break;
+                        }
+                    }
+                    
+                    // If we matched a reasonable amount, highlight those items
+                    if (matchedChars > chunkPreview.length * 0.3) { // At least 30% match
+                        // Find which items correspond to this text range
+                        textItemMap.forEach(({ index, startPos, endPos }) => {
+                            if ((startPos >= searchStart && startPos < foundEnd) ||
+                                (endPos > searchStart && endPos <= foundEnd) ||
+                                (startPos <= searchStart && endPos >= foundEnd)) {
+                                highlightedIndices.add(index);
+                            }
+                        });
+                        
+                        // If we found matches, return them
+                        if (highlightedIndices.size > 0) {
+                            return highlightedIndices;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback to coordinate-based matching
         const itemsInBbox = [];
 
         allTextItems.forEach((item, index) => {
@@ -180,12 +284,14 @@ const PDFViewer = ({ pdfFile, pageNumber, coordinates, onClose }) => {
             const itemBottom = item.pdfBottom; // Bottom of text in PDF coords
 
             // Check if item overlaps with bbox (with some tolerance)
-            const tolerance = 15; // PDF units
+            // PDF coordinates: Y increases upward (bottom-left origin)
+            // bbox: [x0, y0, x1, y1] where y0 is bottom, y1 is top
+            const tolerance = 50; // Increased tolerance for PDF units (was 15)
             const overlaps = (
                 itemLeft <= x1 + tolerance && // Item starts before or at bbox end
                 itemRight >= x0 - tolerance && // Item ends after or at bbox start
-                itemTop >= y0 - tolerance && // Item top is above or at bbox bottom
-                itemBottom <= y1 + tolerance // Item bottom is below or at bbox top
+                itemTop >= y0 - tolerance && // Item top (larger Y) is above or at bbox bottom (y0)
+                itemBottom <= y1 + tolerance // Item bottom (smaller Y) is below or at bbox top (y1)
             );
 
             if (overlaps) {
@@ -279,14 +385,33 @@ const PDFViewer = ({ pdfFile, pageNumber, coordinates, onClose }) => {
     }
 
     // Convert coordinates object to bbox array for the helper function
+    // Coordinates from backend are in PDF space (bottom-left origin)
+    // bbox format: [x0, y0, x1, y1] where y0 is bottom, y1 is top
     const bbox = coordinates ? [coordinates.x0, coordinates.y0, coordinates.x1, coordinates.y1] : null;
+    
+    // Debug logging
+    useEffect(() => {
+        if (bbox && textItems.length > 0) {
+            console.log('Citation coordinates:', {
+                bbox,
+                textItemsCount: textItems.length,
+                firstTextItem: textItems[0] ? {
+                    pdfX: textItems[0].pdfX,
+                    pdfY: textItems[0].pdfY,
+                    pdfBottom: textItems[0].pdfBottom
+                } : null,
+                pageView: page ? page.view : null
+            });
+        }
+    }, [bbox, textItems, page]);
+    
     const highlightedIndices = bbox && viewport && page && textItems.length > 0
-        ? getHighlightedTextItems(bbox, viewport, page.view[3], textItems)
+        ? getHighlightedTextItems(bbox, viewport, page.view[3], textItems, chunkText)
         : new Set();
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col transition-colors duration-200" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-6xl max-h-[95vh] flex flex-col transition-colors duration-200" onClick={(e) => e.stopPropagation()}>
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
                     <div className="flex items-center space-x-4">
@@ -306,13 +431,17 @@ const PDFViewer = ({ pdfFile, pageNumber, coordinates, onClose }) => {
                     </button>
                 </div>
 
-                {/* PDF Canvas Container - No Scroll */}
+                {/* PDF Canvas Container - Scrollable */}
                 <div
                     ref={containerRef}
-                    className="relative bg-gray-200 dark:bg-gray-900 p-4 flex items-center justify-center overflow-hidden"
+                    className="relative bg-gray-200 dark:bg-gray-900 p-4 overflow-auto"
                     style={{
-                        maxHeight: 'calc(90vh - 120px)',
-                        overflow: 'hidden',
+                        minHeight: '500px',
+                        maxHeight: 'calc(95vh - 140px)',
+                        width: '100%',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'flex-start',
                     }}
                 >
                     {loading && (
@@ -334,7 +463,7 @@ const PDFViewer = ({ pdfFile, pageNumber, coordinates, onClose }) => {
                     )}
 
                     {!error && viewport && (
-                        <div className="relative inline-block bg-white shadow-lg">
+                        <div className="relative inline-block bg-white shadow-lg m-4">
                             {/* CSS Animation for highlight blinking */}
                             <style>{`
                                 @keyframes highlightBlink {
