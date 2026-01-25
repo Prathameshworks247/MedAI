@@ -22,13 +22,13 @@ const Notifications = () => {
   const getColor = (type) => {
     switch (type) {
       case 'medication':
-        return 'bg-blue-100 text-blue-600';
+        return 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400';
       case 'appointment':
-        return 'bg-green-100 text-green-600';
+        return 'bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400';
       case 'test':
-        return 'bg-purple-100 text-purple-600';
+        return 'bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400';
       default:
-        return 'bg-gray-100 text-gray-600';
+        return 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400';
     }
   };
 
@@ -61,27 +61,27 @@ const Notifications = () => {
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">Notifications</h2>
-        <p className="text-gray-600">Stay updated with your health reminders and alerts</p>
+        <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Notifications</h2>
+        <p className="text-gray-600 dark:text-gray-400">Stay updated with your health reminders and alerts</p>
       </div>
 
       {/* Stats and Actions */}
-      <div className="card mb-6 bg-gradient-to-r from-orange-50 to-red-50 border-2 border-orange-200">
+      <div className="card mb-6 bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 border-2 border-orange-200 dark:border-orange-700 hover:shadow-xl transition-all duration-200">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="bg-orange-600 p-3 rounded-lg relative">
+            <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-3 rounded-xl shadow-md relative">
               <Bell className="w-6 h-6 text-white" />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold shadow-lg">
                   {unreadCount}
                 </span>
               )}
             </div>
             <div>
-              <h3 className="text-lg font-bold text-gray-900">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">
                 {unreadCount} Unread Notification{unreadCount !== 1 ? 's' : ''}
               </h3>
-              <p className="text-sm text-gray-600">{notifications.length} total notifications</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{notifications.length} total notifications</p>
             </div>
           </div>
           <div className="flex space-x-3">
@@ -98,54 +98,54 @@ const Notifications = () => {
       </div>
 
       {/* Filters */}
-      <div className="card mb-6">
+      <div className="card mb-6 hover:shadow-xl transition-all duration-200">
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setFilter('all')}
-            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${
+            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
               filter === 'all'
-                ? 'bg-primary-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-primary-600 text-white shadow-md'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             All
           </button>
           <button
             onClick={() => setFilter('unread')}
-            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${
+            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
               filter === 'unread'
-                ? 'bg-primary-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-primary-600 text-white shadow-md'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             Unread ({unreadCount})
           </button>
           <button
             onClick={() => setFilter('medication')}
-            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${
+            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
               filter === 'medication'
-                ? 'bg-blue-600 text-white'
-                : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800/40'
             }`}
           >
             Medication
           </button>
           <button
             onClick={() => setFilter('appointment')}
-            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${
+            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
               filter === 'appointment'
-                ? 'bg-green-600 text-white'
-                : 'bg-green-100 text-green-700 hover:bg-green-200'
+                ? 'bg-green-600 text-white shadow-md'
+                : 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800/40'
             }`}
           >
             Appointments
           </button>
           <button
             onClick={() => setFilter('test')}
-            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${
+            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
               filter === 'test'
-                ? 'bg-purple-600 text-white'
-                : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                ? 'bg-purple-600 text-white shadow-md'
+                : 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800/40'
             }`}
           >
             Test Results
@@ -157,46 +157,46 @@ const Notifications = () => {
       <div className="space-y-3">
         {filteredNotifications.length === 0 ? (
           <div className="card text-center py-12">
-            <Bell className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">No notifications</h3>
-            <p className="text-gray-600">You're all caught up!</p>
+            <Bell className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">No notifications</h3>
+            <p className="text-gray-600 dark:text-gray-400">You're all caught up!</p>
           </div>
         ) : (
           filteredNotifications.map((notif) => (
             <div
               key={notif.id}
-              className={`card transition-all ${
-                notif.read ? 'bg-white' : 'bg-blue-50 border-2 border-blue-200'
+              className={`card transition-all duration-200 hover:shadow-lg ${
+                notif.read ? 'bg-white dark:bg-gray-800' : 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-700'
               }`}
             >
               <div className="flex items-start space-x-4">
-                <div className={`${getColor(notif.type)} p-3 rounded-lg flex-shrink-0`}>
+                <div className={`${getColor(notif.type)} p-3 rounded-xl shadow-md flex-shrink-0`}>
                   {getIcon(notif.type)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between mb-1">
-                    <h4 className="font-semibold text-gray-900">{notif.title}</h4>
+                    <h4 className="font-semibold text-gray-900 dark:text-white">{notif.title}</h4>
                     {!notif.read && (
-                      <span className="inline-block w-2 h-2 bg-blue-600 rounded-full flex-shrink-0 ml-2 mt-1.5"></span>
+                      <span className="inline-block w-2 h-2 bg-blue-600 dark:bg-blue-400 rounded-full flex-shrink-0 ml-2 mt-1.5"></span>
                     )}
                   </div>
-                  <p className="text-sm text-gray-700 mb-2">{notif.message}</p>
+                  <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">{notif.message}</p>
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
                       {notif.date} at {notif.time}
                     </p>
                     <div className="flex space-x-2">
                       {!notif.read && (
                         <button
                           onClick={() => markAsRead(notif.id)}
-                          className="text-blue-600 hover:text-blue-700 text-xs font-semibold"
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-xs font-semibold transition-colors"
                         >
                           Mark as read
                         </button>
                       )}
                       <button
                         onClick={() => deleteNotification(notif.id)}
-                        className="text-red-600 hover:text-red-700"
+                        className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -210,23 +210,23 @@ const Notifications = () => {
       </div>
 
       {/* Notification Settings */}
-      <div className="card mt-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-4">Notification Preferences</h3>
+      <div className="card mt-6 hover:shadow-xl transition-all duration-200">
+        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Notification Preferences</h3>
         <div className="space-y-3">
-          <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-            <span className="text-sm font-semibold text-gray-900">Medication Reminders</span>
+          <label className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-all">
+            <span className="text-sm font-semibold text-gray-900 dark:text-white">Medication Reminders</span>
             <input type="checkbox" defaultChecked className="w-5 h-5 text-blue-600" />
           </label>
-          <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-            <span className="text-sm font-semibold text-gray-900">Appointment Reminders</span>
+          <label className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-all">
+            <span className="text-sm font-semibold text-gray-900 dark:text-white">Appointment Reminders</span>
             <input type="checkbox" defaultChecked className="w-5 h-5 text-blue-600" />
           </label>
-          <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-            <span className="text-sm font-semibold text-gray-900">Test Result Updates</span>
+          <label className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-all">
+            <span className="text-sm font-semibold text-gray-900 dark:text-white">Test Result Updates</span>
             <input type="checkbox" defaultChecked className="w-5 h-5 text-blue-600" />
           </label>
-          <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-            <span className="text-sm font-semibold text-gray-900">Health Tips</span>
+          <label className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-all">
+            <span className="text-sm font-semibold text-gray-900 dark:text-white">Health Tips</span>
             <input type="checkbox" defaultChecked className="w-5 h-5 text-blue-600" />
           </label>
         </div>
