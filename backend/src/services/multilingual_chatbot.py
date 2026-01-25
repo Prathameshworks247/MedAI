@@ -141,52 +141,78 @@ async def speech_to_text_translate(audio_data: bytes, source_language: str = "hi
 
             # Receive messages until we get the final transcript (with timeout)
             try:
-                async with asyncio.timeout(30):  # 30 second timeout
-                    message_count = 0
-                    max_wait_after_transcript = 2  # Wait for 2 seconds after getting transcript
-                    got_transcript = False
+                async with asyncio.timeout(30):  # 30 second overall timeout
+                    last_update_time = None
+                    no_update_wait = 4.0  # Wait 4 seconds with no new updates before finalizing
 
-                    async for message in websocket:
-                        data = json.loads(message)
-                        msg_type = data.get("type")
+                    while True:
+                        try:
+                            # Wait for next message with timeout
+                            message = await asyncio.wait_for(
+                                websocket.recv(),
+                                timeout=no_update_wait if last_update_time else 10.0
+                            )
 
-                        if msg_type == "data":
-                            result_data = data.get("data", {})
-                            new_transcript = result_data.get("transcript", "").strip()
-                            lang_code = result_data.get("language_code")
+                            data = json.loads(message)
+                            msg_type = data.get("type")
 
-                            if new_transcript:
-                                transcript = new_transcript
-                                got_transcript = True
-                            if lang_code:
-                                detected_language = lang_code
+                            if msg_type == "data":
+                                result_data = data.get("data", {})
+                                new_transcript = result_data.get("transcript", "").strip()
+                                lang_code = result_data.get("language_code")
 
-                            print(f"📥 Received transcript: {transcript}")
+                                if new_transcript:
+                                    # Sarvam sends cumulative transcripts, so we keep the latest one
+                                    transcript = new_transcript
+                                    last_update_time = asyncio.get_event_loop().time()
+                                    print(f"📥 Received transcript chunk: {new_transcript}")
+                                if lang_code:
+                                    detected_language = lang_code
 
-                        elif msg_type == "error":
-                            error_msg = data.get("data", {}).get("error", "Unknown error")
-                            print(f"❌ Sarvam AI Error: {error_msg}")
-                            raise ValueError(f"Sarvam AI Error: {error_msg}")
+                            elif msg_type == "error":
+                                error_msg = data.get("data", {}).get("error", "Unknown error")
+                                print(f"❌ Sarvam AI Error: {error_msg}")
+                                raise ValueError(f"Sarvam AI Error: {error_msg}")
 
-                        # If we got a transcript, wait a bit more for any final updates then break
-                        if got_transcript:
-                            message_count += 1
-                            if message_count > 2:  # Wait for a couple more messages
-                                await asyncio.sleep(1)  # Final wait
+                            elif msg_type == "event":
+                                # Check for completion event
+                                event_data = data.get("data", {})
+                                event_type = event_data.get("event_type")
+                                if event_type == "final" or event_type == "complete":
+                                    print(f"✅ STT streaming complete (completion event)")
+                                    break
+
+                        except asyncio.TimeoutError:
+                            # No new messages received within timeout period
+                            if transcript and last_update_time:
+                                print(f"✅ STT complete (no updates for {no_update_wait}s)")
+                                break
+                            else:
+                                print(f"⚠️ Timeout waiting for transcript")
                                 break
 
             except asyncio.TimeoutError:
-                print(f"⚠️ WebSocket receive timeout, using transcript so far: {transcript}")
+                print(f"⚠️ Overall WebSocket timeout, using transcript: {transcript}")
 
             # Close the connection
             await websocket.close()
 
-        # Validate we got a transcript
-        if not transcript or transcript.strip() == "":
+        # Validate we got a meaningful transcript
+        transcript = transcript.strip()
+        print(f"✅ Final complete transcript: {transcript}")
+
+        if not transcript:
             raise ValueError(
                 "No transcript received from audio. This could be due to: "
                 "1) Silent/empty audio, 2) Audio too short, 3) Unsupported audio format, "
                 "4) Poor audio quality. Please try speaking louder and clearer."
+            )
+
+        # Check if transcript is too short or meaningless (e.g., just "Um", "Uh")
+        words = transcript.split()
+        if len(words) == 1 and words[0].lower() in ["um", "uh", "ah", "er", "hmm"]:
+            raise ValueError(
+                "Only filler words detected. Please speak a complete question or statement."
             )
 
         return {
@@ -232,17 +258,27 @@ async def generate_multilingual_response(
         # Build system prompt with language instruction
         system_prompt = f"""You are a helpful health assistant chatbot for patients.
 
-CRITICAL INSTRUCTION: You MUST respond ONLY in {lang_name} language. Do NOT use English in your response except for medical terms that don't have common translations.
+🚨 CRITICAL LANGUAGE INSTRUCTION 🚨
+You MUST respond COMPLETELY and ONLY in {lang_name} language.
+- Do NOT use English at all, except for medical terms without common translations
+- Do NOT write any part of your response in English
+- Every word must be in {lang_name}
+- If the language is Hindi, use Devanagari script
+- If you don't understand the question, respond in {lang_name} asking for clarification
+- NEVER mix languages in your response
 
 Guidelines:
 1. Be empathetic, friendly, and professional
 2. Provide helpful information about medications, diet, and general health queries
-3. Keep responses concise and easy to understand
-4. If asked about serious medical conditions, advise consulting a doctor
-5. For emergencies, advise calling emergency services immediately
-6. ALWAYS respond in {lang_name} language
+3. Keep responses concise and easy to understand (2-4 sentences maximum)
+4. If asked about serious medical conditions, advise consulting a doctor (in {lang_name})
+5. For emergencies, advise calling emergency services immediately (in {lang_name})
+6. ALWAYS provide a complete, meaningful answer - never give generic greetings unless appropriate
 
-Remember: Your entire response should be in {lang_name}."""
+Language Target: {lang_name} ONLY
+Output Format: Pure {lang_name} text (with English transliteration in parentheses if helpful for pronunciation)
+
+Remember: Your entire response MUST be in {lang_name}. Do not respond in English under any circumstances."""
 
         # Build messages
         messages = [SystemMessage(content=system_prompt)]
@@ -266,6 +302,13 @@ Remember: Your entire response should be in {lang_name}."""
         # Generate response using Gemini
         response = gemini_llm.invoke(messages)
         response_text = response.content if hasattr(response, "content") else str(response)
+
+        # Validate response is not empty
+        if not response_text or response_text.strip() == "":
+            raise ValueError("Gemini returned empty response")
+
+        # Log for debugging
+        print(f"🤖 Gemini response (first 100 chars): {response_text[:100]}")
 
         return response_text
 
@@ -429,8 +472,11 @@ async def process_multilingual_message(
             raise ValueError("Either audio_data or text_input must be provided")
 
         # Validate we have text to process
-        if not english_text or english_text.strip() == "":
+        english_text = english_text.strip()
+        if not english_text:
             raise ValueError("Could not extract text from input. Please try again with a clearer message.")
+
+        print(f"✅ Sending to Gemini: '{english_text}' (target language: {target_language})")
 
         # Step 2: Generate response in target language using Gemini
         response_text = await generate_multilingual_response(
@@ -438,7 +484,7 @@ async def process_multilingual_message(
             target_language=target_language,
             conversation_history=conversation_history
         )
-        print(f"💬 Generated response in {target_language}: {response_text}")
+        print(f"💬 Generated response in {target_language}: {response_text[:100]}...")
 
         # Step 3: Convert response to speech (if requested)
         response_audio_base64 = None
