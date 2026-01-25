@@ -1,8 +1,8 @@
-# MediPortal
+# MedAI
 
 **AI-Powered Healthcare Management System** built for Inter-IIIT Final Round
 
-MediPortal is a comprehensive healthcare platform that leverages AI to enhance doctor-patient interactions, automate clinical workflows, and provide intelligent health insights. The system features dual portals for doctors and patients, with real-time multilingual support and advanced medical AI capabilities.
+MedAI is a comprehensive healthcare platform that leverages AI to enhance doctor-patient interactions, automate clinical workflows, and provide intelligent health insights. The system features dual portals for doctors and patients, with real-time multilingual support and advanced medical AI capabilities.
 
 ## Key Features & Capabilities
 
@@ -78,6 +78,172 @@ MediPortal is a comprehensive healthcare platform that leverages AI to enhance d
 - **Cloudflare R2**: Medical documents, audio files, images
 - **FAISS (In-Memory)**: Vector embeddings for document search
 
+## Document Ingestion Architecture
+
+MedAI implements two sophisticated document processing pipelines to handle medical documents and enable intelligent search capabilities.
+
+### Pipeline 1: Medical Document Processing
+
+This pipeline extracts structured clinical information from medical documents (PDFs, transcripts, text) and stores them in MongoDB for retrieval.
+
+```mermaid
+flowchart TD
+    A[📄 Input Document] --> B{Document Type?}
+    B -->|PDF File| C[Upload to R2 Storage]
+    B -->|Transcript/Text| D[Direct Text Input]
+
+    C --> E[PDFPlumber Text Extraction]
+    E --> F[Extracted Text]
+    D --> F
+
+    F --> G[🤖 LLM Clinical Info Extraction]
+    G --> H[Gemini 2.0 Flash API]
+    H --> I{Structured Output}
+
+    I --> J[Symptoms]
+    I --> K[Diagnoses]
+    I --> L[Medications]
+    I --> M[Vital Signs]
+    I --> N[Lab Results]
+    I --> O[Recommendations]
+
+    J & K & L & M & N & O --> P[💾 Save to MongoDB]
+    P --> Q[Patient Collection Update]
+    P --> R[Appointment Collection Update]
+
+    Q & R --> S[✅ Processing Complete]
+
+    style A fill:#e1f5ff
+    style G fill:#fff4e1
+    style H fill:#ffe1f5
+    style P fill:#e1ffe1
+    style S fill:#d4edda
+```
+
+### Pipeline 2: PDF RAG (Retrieval-Augmented Generation)
+
+This pipeline creates semantic embeddings for intelligent document search and question-answering.
+
+```mermaid
+flowchart TD
+    A[📄 PDF Upload] --> B[PDFPlumber Open]
+    B --> C[Extract Text + Coordinates]
+
+    C --> D[Page-by-Page Processing]
+    D --> E[Force Split Text Chunking]
+
+    E --> F{Chunk Size Check}
+    F -->|> 300 chars| G[Recursive Split]
+    F -->|≤ 300 chars| H[Valid Chunk]
+    G --> H
+
+    H --> I[Create PDFChunk Object]
+    I --> J[Store Text + Coordinates]
+
+    J --> K[🧠 Generate Embeddings]
+    K --> L[Sentence Transformers Model<br/>all-MiniLM-L6-v2]
+    L --> M[384-dim Vector Embeddings]
+
+    M --> N[FAISS Vector Store]
+    N --> O[Build Index]
+
+    O --> P{Query Request?}
+    P -->|Yes| Q[Semantic Similarity Search]
+    Q --> R[Top-K Results with Scores]
+    R --> S[Return Chunks + Coordinates]
+
+    P -->|No| T[Ready for Queries]
+
+    style A fill:#e1f5ff
+    style E fill:#fff4e1
+    style K fill:#ffe1f5
+    style N fill:#e1ffe1
+    style S fill:#d4edda
+```
+
+### Sequence Diagram: Complete Document Ingestion Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as FastAPI Router
+    participant Agent as Agent Pipeline
+    participant R2 as Cloudflare R2
+    participant PDF as PDF Extractor
+    participant LLM as Gemini LLM
+    participant DB as MongoDB
+    participant RAG as PDF RAG Service
+    participant FAISS as FAISS Vector Store
+
+    Note over Client,FAISS: Medical Document Processing Pipeline
+
+    Client->>API: POST /ingest/document/{appointment_id}
+    API->>API: Save to temp file
+    API->>Agent: process_medical_document()
+
+    Agent->>R2: upload_to_r2(file_content)
+    R2-->>Agent: file_uri
+
+    Agent->>PDF: extract_text_from_pdf(file_path)
+    PDF->>PDF: pdfplumber.open()
+    PDF-->>Agent: extracted_text
+
+    Agent->>LLM: extract_clinical_info(document_text)
+    LLM->>LLM: Structured extraction with Gemini
+    LLM-->>Agent: clinical_data (symptoms, meds, etc.)
+
+    Agent->>DB: save_to_mongo(patient_id, clinical_data)
+    DB->>DB: Update patient record
+    DB->>DB: Update appointment record
+    DB-->>Agent: save_result
+
+    Agent-->>API: Processing results
+    API-->>Client: 200 OK {status: success}
+
+    Note over Client,FAISS: PDF RAG Pipeline (Parallel Process)
+
+    Client->>RAG: POST /pdf/upload
+    RAG->>RAG: process_pdf(file, doc_id)
+
+    RAG->>PDF: pdfplumber.extract_text + coordinates
+    PDF-->>RAG: text chunks with positions
+
+    RAG->>RAG: Force split chunking (300 chars)
+    RAG->>RAG: Create PDFChunk objects
+
+    RAG->>FAISS: Generate embeddings
+    FAISS->>FAISS: HuggingFace Sentence Transformers
+    FAISS-->>RAG: Vector embeddings (384-dim)
+
+    RAG->>FAISS: Build FAISS index
+    FAISS-->>RAG: Index ready
+
+    RAG-->>Client: {document_id, total_chunks, status}
+
+    Note over Client,FAISS: Semantic Search Query
+
+    Client->>RAG: POST /pdf/search
+    RAG->>FAISS: similarity_search(query, k=5)
+    FAISS->>FAISS: Cosine similarity
+    FAISS-->>RAG: Top-K chunks + scores
+    RAG-->>Client: Results with coordinates
+```
+
+### Key Technical Details
+
+#### Medical Document Processing
+- **Text Extraction**: PDFPlumber for PDF parsing, PyPDF2 as fallback
+- **Clinical Information Extraction**: Gemini 2.0 Flash with structured output schema
+- **Storage**: MongoDB collections updated with extracted medical data
+- **Cloud Storage**: R2 for original document files
+
+#### PDF RAG System
+- **Chunking Strategy**: Target 300 characters per chunk with 50-char overlap
+- **Coordinate Tracking**: X/Y coordinates stored for PDF highlight annotations
+- **Embedding Model**: sentence-transformers/all-MiniLM-L6-v2 (384 dimensions)
+- **Vector Store**: FAISS with in-memory indexing for fast similarity search
+- **Search**: Cosine similarity-based semantic search returning top-K results with scores
+
 ## Tech Stack
 
 ### Frontend
@@ -106,7 +272,7 @@ MediPortal is a comprehensive healthcare platform that leverages AI to enhance d
 ## Project Structure
 
 ```
-MediPortal/
+project root/ (MedAI)
 ├── frontend/               # React application
 │   ├── src/
 │   │   ├── components/
@@ -212,14 +378,14 @@ uvicorn src.server:app --reload --port 8000
 #### 4. Environment Variables
 Create `backend/.env`:
 ```env
-MONGODB_URI=mongodb://localhost:27017/mediportal
+MONGODB_URI=mongodb://localhost:27017/medai
 GEMINI_API_KEY=your_gemini_key
 FEATHERLESS_API_KEY=your_featherless_key
 SARVAM_AI_API_KEY=your_sarvam_key
 R2_ENDPOINT=https://your-account-id.r2.cloudflarestorage.com
 R2_ACCESS_KEY=your_r2_access_key
 R2_SECRET_KEY=your_r2_secret_key
-R2_BUCKET=mediportal
+R2_BUCKET=medai
 R2_PUBLIC_URL=https://your-public-url.com
 SECRET_KEY=your_jwt_secret_key_here
 PORT=8000
