@@ -162,8 +162,8 @@ async def speech_to_text_translate(audio_data: bytes, source_language: str = "hi
                                 lang_code = result_data.get("language_code")
 
                                 if new_transcript:
-                                    # Sarvam sends cumulative transcripts, so we keep the latest one
-                                    transcript = new_transcript
+                                    # Accumulate all transcript chunks
+                                    transcript = transcript + " " + new_transcript if transcript else new_transcript
                                     last_update_time = asyncio.get_event_loop().time()
                                     print(f"📥 Received transcript chunk: {new_transcript}")
                                 if lang_code:
