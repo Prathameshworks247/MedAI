@@ -5,6 +5,7 @@ from src.routes.patient import router as patient_router
 from src.routes.doctor import router as doctor_router
 from src.routes.auth import router as auth_router
 from src.routes.ingest import router as ingest_router
+from src.routes.chatbot import router as chatbot_router
 
 router = APIRouter()
 
@@ -37,5 +38,11 @@ router.include_router(
     ingest_router,
     prefix="/ingest",
     tags=["ingest"],
+)
+
+router.include_router(
+    chatbot_router,
+    prefix="/chatbot",
+    tags=["chatbot"],
 )
 
