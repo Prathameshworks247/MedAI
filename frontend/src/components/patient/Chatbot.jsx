@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Mic, MicOff, Keyboard, Volume2, Globe, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
 
 const SUPPORTED_LANGUAGES = {
     'hi-IN': 'Hindi (हिंदी)',
@@ -376,7 +377,13 @@ const Chatbot = () => {
                                                 : 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-2xl rounded-tr-none'
                                                 }`}
                                         >
-                                            <p className="whitespace-pre-wrap">{message.text}</p>
+                                            {message.type === 'bot' ? (
+                                                <div className="prose prose-sm dark:prose-invert max-w-none break-words">
+                                                    <ReactMarkdown>{message.text}</ReactMarkdown>
+                                                </div>
+                                            ) : (
+                                                <p className="whitespace-pre-wrap">{message.text}</p>
+                                            )}
                                         </div>
 
                                         {/* Metadata & Actions */}
