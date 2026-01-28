@@ -2,7 +2,7 @@
 
 **AI-Powered Healthcare Management System** built for Inter-IIIT Final Round
 
-MedAI is a comprehensive healthcare platform that leverages AI to enhance doctor-patient interactions, automate clinical workflows, and provide intelligent health insights. The system features dual portals for doctors and patients, with real-time multilingual support and advanced medical AI capabilities.
+DiagnosAI is a comprehensive healthcare platform that leverages AI to enhance doctor-patient interactions, automate clinical workflows, and provide intelligent health insights. The system features dual portals for doctors and patients, with real-time multilingual support and advanced medical AI capabilities.
 
 ## Key Features & Capabilities
 
