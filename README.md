@@ -1,4 +1,4 @@
-# MedAI
+# DiagnosAI
 
 **AI-Powered Healthcare Management System** built for Inter-IIIT Final Round
 
