@@ -13,7 +13,7 @@ MedAI is a comprehensive healthcare platform that leverages AI to enhance doctor
 - Uses **Med42** (medical LLM via Featherless AI) to generate clinical diagnoses
 - Structured output with differential diagnoses, confidence scores, and clinical reasoning
 - Integrates LSTM-based time series predictions for health metrics
-- Context compression using Gemini for efficient processing
+- Context compression using Gemini for efficient processing 
 
 #### 2. **Multilingual Patient Chatbot**
 - Supports **12 languages**: Hindi, Tamil, Telugu, Bengali, Gujarati, Kannada, Malayalam, Marathi, Odia, Punjabi, English, and more
